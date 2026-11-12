@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 	"unicode/utf16"
+
+	"github.com/remigl/tapis/internal/winsec"
 )
 
 // A small PowerShell loop reads the Global System Media Transport Controls
@@ -57,7 +59,7 @@ func encode(s string) string {
 func watch(ctx context.Context, fn func(Info)) {
 	enc := encode(fmt.Sprintf(script, os.Getpid()))
 	for ctx.Err() == nil {
-		cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc)
+		cmd := exec.CommandContext(ctx, winsec.PowerShell(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", enc)
 		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		out, err := cmd.StdoutPipe()
 		if err != nil || cmd.Start() != nil {

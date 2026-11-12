@@ -5,19 +5,40 @@ package system
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
 
 var errUnknown = errors.New("unknown action")
 
+// bin returns the absolute path of a system command, preferring the
+// standard system directories over the user's PATH.
+func bin(name string) string {
+	for _, d := range []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin"} {
+		if p := d + "/" + name; isExec(p) {
+			return p
+		}
+	}
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+	return ""
+}
+
+func isExec(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0
+}
+
 func run(cmds ...[]string) error {
 	var errs []string
 	for _, c := range cmds {
-		if _, err := exec.LookPath(c[0]); err != nil {
+		path := bin(c[0])
+		if path == "" {
 			continue
 		}
-		out, err := exec.Command(c[0], c[1:]...).CombinedOutput()
+		out, err := exec.Command(path, c[1:]...).CombinedOutput()
 		if err == nil {
 			return nil
 		}

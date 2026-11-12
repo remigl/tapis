@@ -45,7 +45,9 @@ type Config struct {
 	Smooth bool
 	// ConfirmPairing, if set, is asked to approve each new phone (on the
 	// computer's side) before it is paired. It may block for a while.
-	ConfirmPairing func(name, ip string) bool
+	// The code is also displayed on the phone, so the user can check that
+	// the request really comes from their phone.
+	ConfirmPairing func(name, ip, code string) bool
 	// OnPairingUsed is called when the current pairing code is consumed.
 	OnPairingUsed func()
 	// SystemAction performs lock/sleep (defaults to system.Do).
@@ -74,6 +76,13 @@ type Server struct {
 	connsByIP   map[string]int
 	notes       map[string]time.Time
 	sessions    map[*session]struct{}
+	rawConns    int
+	rawByIP     map[string]int
+
+	netMu      sync.Mutex
+	nets       []*net.IPNet // subnets Tapis serves (refreshed periodically)
+	ownIPs     []net.IP
+	netsLoaded time.Time
 }
 
 type failInfo struct {
@@ -91,6 +100,8 @@ const (
 	maxConnsPerIP   = 4    // simultaneous WebSocket connections from one address
 	maxTracked      = 1024 // bound on per-address bookkeeping
 	confirmTimeout  = 60 * time.Second
+	maxRawConns     = 256 // simultaneous TCP connections
+	maxRawPerIP     = 32  // simultaneous TCP connections from one address
 )
 
 // New prepares the server: loads the device store and TLS identity.
@@ -106,7 +117,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	host, _ := os.Hostname()
 	return &Server{cfg: cfg, Store: st, Identity: id, IPs: ips, hostname: host, mover: newMover(cfg.Injector, cfg.Smooth),
-		fails: map[string]*failInfo{}, sessions: map[*session]struct{}{}, connsByIP: map[string]int{}}, nil
+		fails: map[string]*failInfo{}, sessions: map[*session]struct{}{}, connsByIP: map[string]int{}, rawByIP: map[string]int{}}, nil
 }
 
 // NewPairing creates a fresh single-use pairing token and returns the URLs
@@ -161,8 +172,9 @@ func (s *Server) Run(ctx context.Context) error {
 		// HTTP/1.1 only: WebSockets over HTTP/2 (RFC 8441) are not needed.
 		TLSNextProto:      map[string]func(*http.Server, *tls.Conn, http.Handler){},
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second, // requests have no body; WebSockets clear it
 		MaxHeaderBytes:    16 << 10,
-		IdleTimeout:       2 * time.Minute,
+		IdleTimeout:       60 * time.Second,
 		ErrorLog:          log.New(&handshakeLog{s: s}, "", 0),
 	}
 	// Someone typing the address without "https://" gets redirected
@@ -172,6 +184,9 @@ func (s *Server) Run(ctx context.Context) error {
 			http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusFound)
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       10 * time.Second,
 		MaxHeaderBytes:    16 << 10,
 		ErrorLog:          log.New(io.Discard, "", 0),
 	}
@@ -194,6 +209,13 @@ func (s *Server) Run(ctx context.Context) error {
 				httpLn.Close()
 				return
 			}
+			host, _, _ := net.SplitHostPort(c.RemoteAddr().String())
+			rip := net.ParseIP(host)
+			if !s.allowedClient(rip) || !s.acquireRaw(host) {
+				c.Close() // not even a TLS handshake for outsiders or floods
+				continue
+			}
+			c = &countedConn{Conn: c, release: func() { s.releaseRaw(host) }}
 			go func() {
 				c.SetReadDeadline(time.Now().Add(10 * time.Second))
 				br := bufio.NewReader(c)
@@ -269,6 +291,38 @@ func (h *handshakeLog) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func (s *Server) acquireRaw(ip string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.rawConns >= maxRawConns || s.rawByIP[ip] >= maxRawPerIP {
+		return false
+	}
+	s.rawConns++
+	s.rawByIP[ip]++
+	return true
+}
+
+func (s *Server) releaseRaw(ip string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rawConns--
+	if s.rawByIP[ip]--; s.rawByIP[ip] <= 0 {
+		delete(s.rawByIP, ip)
+	}
+}
+
+// countedConn releases its slot exactly once when closed.
+type countedConn struct {
+	net.Conn
+	once    sync.Once
+	release func()
+}
+
+func (c *countedConn) Close() error {
+	c.once.Do(c.release)
+	return c.Conn.Close()
+}
+
 // peekConn is a connection whose first bytes were already buffered.
 type peekConn struct {
 	net.Conn
@@ -326,6 +380,61 @@ func IsLocal(ip net.IP) bool {
 	return ip != nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast())
 }
 
+// served returns the subnets of the network interfaces Tapis is offered
+// on (the ones shown in its addresses), and those addresses. It is
+// refreshed every 15 seconds so that changing Wi-Fi network just works.
+func (s *Server) served() ([]*net.IPNet, []net.IP) {
+	s.netMu.Lock()
+	defer s.netMu.Unlock()
+	if time.Since(s.netsLoaded) < 15*time.Second && s.netsLoaded.After(time.Time{}) {
+		return s.nets, s.ownIPs
+	}
+	s.nets, s.ownIPs = servedNets()
+	s.netsLoaded = time.Now()
+	return s.nets, s.ownIPs
+}
+
+func servedNets() ([]*net.IPNet, []net.IP) {
+	ips := LocalIPs()
+	var nets []*net.IPNet
+	ifaces, _ := net.Interfaces()
+	for _, ifc := range ifaces {
+		addrs, _ := ifc.Addrs()
+		for _, a := range addrs {
+			ipn, ok := a.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			for _, ip := range ips {
+				if ipn.IP.Equal(ip) {
+					nets = append(nets, &net.IPNet{IP: ipn.IP.Mask(ipn.Mask), Mask: ipn.Mask})
+				}
+			}
+		}
+	}
+	return nets, ips
+}
+
+// allowedClient accepts loopback and devices on the same subnet as one of
+// the addresses Tapis is offered on. Peers reached through a VPN, a
+// virtual machine network or a router are refused, even if their address
+// is private.
+func (s *Server) allowedClient(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	if s.cfg.AllowAnyNetwork || ip.IsLoopback() {
+		return true
+	}
+	nets, _ := s.served()
+	for _, n := range nets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // validHost accepts IP literals of local networks, localhost and our
 // mDNS-style name. Domain names that could be re-pointed by an attacker
 // (DNS rebinding) are refused.
@@ -336,7 +445,16 @@ func (s *Server) validHost(hostport string) bool {
 	}
 	host = strings.Trim(host, "[]")
 	if ip := net.ParseIP(host); ip != nil {
-		return s.cfg.AllowAnyNetwork || IsLocal(ip)
+		if s.cfg.AllowAnyNetwork || ip.IsLoopback() {
+			return true
+		}
+		_, own := s.served()
+		for _, o := range own {
+			if o.Equal(ip) {
+				return true
+			}
+		}
+		return false
 	}
 	host = strings.ToLower(host)
 	return host == "localhost" || host == s.Identity.LeafCert.Subject.CommonName
@@ -345,8 +463,8 @@ func (s *Server) validHost(hostport string) bool {
 // guard rejects non-local clients and adds security headers.
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.cfg.AllowAnyNetwork && !IsLocal(remoteIP(r)) {
-			s.cfg.Log.Printf("rejected connection from non-local address %s", r.RemoteAddr)
+		if !s.allowedClient(remoteIP(r)) {
+			s.noteOnce("net"+r.RemoteAddr, "rejected connection from "+r.RemoteAddr+" (not on the local network Tapis serves)")
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -555,9 +673,10 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 		name := cleanName(m.Name)
 		if s.cfg.ConfirmPairing != nil {
-			s.send(conn, map[string]string{"t": "confirm"})
+			code := store.RandomDigits(6)
+			s.send(conn, map[string]string{"t": "confirm", "code": code})
 			conn.SetReadDeadline(time.Now().Add(confirmTimeout + 5*time.Second))
-			if !s.cfg.ConfirmPairing(name, ip) {
+			if !s.cfg.ConfirmPairing(name, ip, code) {
 				s.cfg.Log.Printf("pairing of %q from %s refused on this computer", name, ip)
 				s.send(conn, map[string]string{"t": "error", "code": "refused"})
 				return
@@ -760,6 +879,13 @@ func (s *Server) dispatch(sess *session, m *message) error {
 		return in.Type(string(r))
 	case "ping":
 		s.send(sess.conn, map[string]string{"t": "pong"})
+		return nil
+	case "forget": // the phone forgot this computer: drop its key here too
+		if _, err := s.Store.Revoke(sess.dev.ID); err != nil {
+			return err
+		}
+		s.cfg.Log.Printf("%s unpaired itself", sess.dev.Name)
+		sess.conn.Close()
 		return nil
 	case "sys":
 		a := system.Action(m.A)

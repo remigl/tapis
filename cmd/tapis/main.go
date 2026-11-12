@@ -27,6 +27,7 @@ import (
 	"github.com/remigl/tapis/internal/server"
 	"github.com/remigl/tapis/internal/store"
 	"github.com/remigl/tapis/internal/system"
+	_ "github.com/remigl/tapis/internal/winsec" // Windows: load DLLs from System32 only
 	"github.com/remigl/tapis/web"
 )
 
@@ -348,7 +349,7 @@ type approver struct {
 	pending chan bool
 }
 
-func (a *approver) ask(name, ip string) bool {
+func (a *approver) ask(name, ip, code string) bool {
 	ch := make(chan bool, 1)
 	a.mu.Lock()
 	if a.pending != nil { // one request at a time
@@ -358,7 +359,7 @@ func (a *approver) ask(name, ip string) bool {
 	a.pending = ch
 	a.mu.Unlock()
 	defer func() { a.mu.Lock(); a.pending = nil; a.mu.Unlock() }()
-	fmt.Printf("\n>>> New phone %q (%s) wants to pair. Allow it? Type y (yes) or n (no), then Enter: ", name, ip)
+	fmt.Printf("\n>>> New phone %q (%s) wants to pair.\n>>> Check that the phone shows the code %s %s.\n>>> Allow it? Type y (yes) or n (no), then Enter: ", name, ip, code[:3], code[3:])
 	select {
 	case ok := <-ch:
 		return ok

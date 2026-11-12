@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"unicode/utf16"
+
+	"github.com/remigl/tapis/internal/winsec"
 )
 
 // Windows Firewall applies a different profile to "Public" and "Private"
@@ -40,7 +42,7 @@ func encode(script string) string {
 }
 
 func powershell(args ...string) *exec.Cmd {
-	cmd := exec.Command("powershell.exe", append([]string{"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass"}, args...)...)
+	cmd := exec.Command(winsec.PowerShell(), append([]string{"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass"}, args...)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd
 }
@@ -71,7 +73,7 @@ New-NetFirewallRule -DisplayName $n -Description 'Lets phones on the local netwo
 		psQuote(exe), psQuote(ruleName(port)), port)
 	// Start-Process -Verb RunAs shows the UAC prompt and waits for the
 	// elevated PowerShell to finish.
-	launcher := fmt.Sprintf(`Start-Process -FilePath powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand','%s'`, encode(script))
+	launcher := fmt.Sprintf(`Start-Process -FilePath %s -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand','%s'`, psQuote(winsec.PowerShell()), encode(script))
 	if out, err := powershell("-Command", launcher).CombinedOutput(); err != nil {
 		if strings.Contains(string(out), "canceled") || strings.Contains(string(out), "annul") {
 			return errors.New("the administrator permission request was declined")

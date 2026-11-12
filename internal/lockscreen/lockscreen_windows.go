@@ -4,8 +4,10 @@ package lockscreen
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +24,7 @@ import (
 	"unsafe"
 
 	"github.com/remigl/tapis/internal/input"
+	"github.com/remigl/tapis/internal/winsec"
 )
 
 var (
@@ -86,8 +89,8 @@ func encode(script string) string {
 
 // runElevated runs a PowerShell script as administrator (one UAC prompt).
 func runElevated(script string) error {
-	launcher := fmt.Sprintf(`Start-Process -FilePath powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand','%s'`, encode(script))
-	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", launcher)
+	launcher := fmt.Sprintf(`Start-Process -FilePath %s -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand','%s'`, psQuote(winsec.PowerShell()), encode(script))
+	cmd := exec.Command(winsec.PowerShell(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", launcher)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%v %s", err, strings.TrimSpace(string(out)))
@@ -101,19 +104,30 @@ func Install() error {
 	if err != nil {
 		return err
 	}
+	// The file that will run as SYSTEM must be exactly this program: its
+	// hash is computed here and checked by the elevated script before and
+	// after copying (so it cannot be swapped while the UAC prompt is open).
+	data, err := os.ReadFile(exe)
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256(data)
+	hash := strings.ToUpper(hex.EncodeToString(sum[:]))
 	dst := helperPath()
 	script := fmt.Sprintf(`$ErrorActionPreference = 'Stop'
-$src = %s; $dst = %s; $name = %s
+$src = %s; $dst = %s; $name = %s; $hash = '%s'
+if ((Get-FileHash -Algorithm SHA256 -LiteralPath $src).Hash -ne $hash) { throw 'Tapis was modified, installation cancelled' }
 Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
 Get-Process -Name 'tapis-lockscreen' -ErrorAction SilentlyContinue | Stop-Process -Force
 New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
 Copy-Item -Force -LiteralPath $src -Destination $dst
+if ((Get-FileHash -Algorithm SHA256 -LiteralPath $dst).Hash -ne $hash) { Remove-Item -Force -LiteralPath $dst; throw 'copy mismatch, installation cancelled' }
 $a = New-ScheduledTaskAction -Execute $dst -Argument '--lockscreen-service'
 $t = New-ScheduledTaskTrigger -AtStartup
 $p = New-ScheduledTaskPrincipal -UserId 'S-1-5-18' -LogonType ServiceAccount -RunLevel Highest
 $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskName $name -Action $a -Trigger $t -Principal $p -Settings $s -Description 'Lets Tapis type on the lock screen (only while the session is locked).' -Force | Out-Null
-Start-ScheduledTask -TaskName $name`, psQuote(exe), psQuote(dst), psQuote(TaskName))
+Start-ScheduledTask -TaskName $name`, psQuote(exe), psQuote(dst), psQuote(TaskName), hash)
 	if err := runElevated(script); err != nil {
 		return err
 	}
@@ -429,7 +443,8 @@ func (c *client) send(ev event) bool {
 			return false
 		}
 		c.lastTry = time.Now()
-		h, err := syscall.CreateFile(u16(pipeName(currentSession())), syscall.GENERIC_WRITE, 0, nil, syscall.OPEN_EXISTING, 0, 0)
+		h, err := syscall.CreateFile(u16(pipeName(currentSession())), syscall.GENERIC_WRITE, 0, nil, syscall.OPEN_EXISTING,
+			0x00100000, 0) // SECURITY_SQOS_PRESENT | SECURITY_ANONYMOUS: the server cannot impersonate us
 		if err != nil {
 			return false // helper not installed: fall back to normal input
 		}

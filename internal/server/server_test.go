@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/remigl/tapis/internal/certs"
 )
@@ -36,13 +37,37 @@ func TestHandshakeLog(t *testing.T) {
 
 func TestValidHost(t *testing.T) {
 	s := &Server{Identity: &certs.Identity{LeafCert: &x509.Certificate{Subject: pkix.Name{CommonName: "desktop.local"}}}}
+	_, lan, _ := net.ParseCIDR("192.168.1.0/24")
+	s.nets, s.ownIPs, s.netsLoaded = []*net.IPNet{lan}, []net.IP{net.ParseIP("192.168.1.10")}, time.Now()
 	for h, want := range map[string]bool{
 		"192.168.1.10:47800": true, "127.0.0.1:47800": true, "[::1]:47800": true, "localhost:47800": true,
 		"desktop.local:47800": true, "evil.example:47800": false, "8.8.8.8:47800": false,
 		"192.168.1.10.nip.io:47800": false, "": false,
+		"192.168.1.11:47800": false, // another machine's address: not us
+		"10.0.0.5:47800":     false,
 	} {
 		if got := s.validHost(h); got != want {
 			t.Errorf("validHost(%q) = %v, want %v", h, got, want)
 		}
+	}
+}
+
+func TestAllowedClient(t *testing.T) {
+	s := &Server{}
+	_, lan, _ := net.ParseCIDR("192.168.1.0/24")
+	s.nets, s.ownIPs, s.netsLoaded = []*net.IPNet{lan}, []net.IP{net.ParseIP("192.168.1.10")}, time.Now()
+	for ip, want := range map[string]bool{
+		"192.168.1.57": true, "127.0.0.1": true, "::1": true,
+		"192.168.2.57": false, // another subnet (router, guest network)
+		"10.8.0.2":     false, // a VPN peer: private, but not our Wi-Fi
+		"172.17.0.2":   false, // a container network
+		"8.8.8.8":      false,
+	} {
+		if got := s.allowedClient(net.ParseIP(ip)); got != want {
+			t.Errorf("allowedClient(%s) = %v, want %v", ip, got, want)
+		}
+	}
+	if s.allowedClient(nil) {
+		t.Error("nil address allowed")
 	}
 }

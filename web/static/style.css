@@ -142,6 +142,8 @@ dialog input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--acc
 #overlay .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px; max-width: 420px; }
 #overlay h2 { margin: 0 0 8px; font-size: 18px; }
 #overlay p { color: var(--muted); margin: 0 0 16px; white-space: pre-line; }
+#overlay #ov-code { color: var(--text); font: 700 40px/1.2 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .12em; text-align: center; margin: 8px 0 16px; }
+#overlay #ov-code[hidden] { display: none; }
 
 /* Full-screen toggle icon */
 #btn-fs .exit { display: none; }

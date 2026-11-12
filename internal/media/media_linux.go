@@ -21,7 +21,7 @@ type variant struct {
 func busctl(args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	return exec.CommandContext(ctx, "busctl", append([]string{"--user", "--json=short"}, args...)...).Output()
+	return exec.CommandContext(ctx, busctlPath, append([]string{"--user", "--json=short"}, args...)...).Output()
 }
 
 func players() []string {
@@ -92,8 +92,14 @@ func current() Info {
 	return paused
 }
 
+var busctlPath = "/usr/bin/busctl"
+
 func watch(ctx context.Context, fn func(Info)) {
-	if _, err := exec.LookPath("busctl"); err != nil {
+	if p, err := exec.LookPath(busctlPath); err == nil {
+		busctlPath = p
+	} else if p, err := exec.LookPath("busctl"); err == nil {
+		busctlPath = p
+	} else {
 		return
 	}
 	poll(ctx, 1500*time.Millisecond, current, fn)

@@ -51,10 +51,10 @@ func guiError(err error) {
 		err, tr("Aide :", "Help:"), helpURL), false, true)
 }
 
-func guiConfirm(name, ip string) bool {
+func guiConfirm(name, ip, code string) bool {
 	return winui.MessageBox("Tapis", fmt.Sprintf(tr(
-		"Le téléphone « %s » (%s) veut contrôler cet ordinateur.\n\nL'autoriser ?",
-		"The phone \"%s\" (%s) wants to control this computer.\n\nAllow it?"), name, ip), true, false)
+		"Le téléphone « %s » (%s) veut contrôler cet ordinateur.\n\nVérifie que ton téléphone affiche le code :\n\n        %s %s\n\nSi le code est différent, ou si tu n'es pas en train d'appairer ton téléphone, réponds Non.\n\nL'autoriser ?",
+		"The phone \"%s\" (%s) wants to control this computer.\n\nCheck that your phone shows the code:\n\n        %s %s\n\nIf the code is different, or if you are not pairing your phone right now, answer No.\n\nAllow it?"), name, ip, code[:3], code[3:]), true, false)
 }
 
 func guiPairingUsed() { winui.CloseQR() }

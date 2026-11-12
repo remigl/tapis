@@ -32,6 +32,8 @@ Also remove any rule named after the Tapis program that **blocks** it in *Window
 
 **The phone is not on the same network.** Check that Wi-Fi is on and connected to the same network as the computer. Guest networks, hotel, campus and some café Wi-Fi isolate devices from each other ("client isolation"): Tapis cannot work there. Use your phone's hotspot instead: connect the computer to the phone's hotspot, then start Tapis again (a new address is shown).
 
+**The phone and the computer are on different subnets.** For security, Tapis only answers devices on the same subnet as the computer (the first three numbers of the address are usually identical, e.g. `192.168.1.x`). Some mesh systems or routers put Wi-Fi and Ethernet on different subnets: connect both devices to the same network. The log (menu → *Open the log*) shows `rejected connection from …` in that case.
+
 **Tapis shows the wrong address.** Compare with the IPv4 address of your Wi-Fi/Ethernet adapter given by `ipconfig` (Windows) or `ip addr` (Linux). If the computer has several networks, Tapis lists them all under "other network": try each one.
 
 **A VPN is active** on the computer or the phone. Some VPNs block local network access: disable it, or enable "allow LAN access" in the VPN settings.
@@ -51,7 +53,7 @@ After changing the setting, reload the Tapis page.
 
 ## "Confirm on the computer" is shown and nothing happens
 
-Since 0.2.0 each new phone must be approved on the computer: in the Tapis window type `y` then Enter (or `n` to refuse). Without an answer within one minute the pairing is refused. If Tapis runs without a window (Linux service), start it with `tapis --pair` in a terminal to pair.
+Each new phone must be approved on the computer: answer **Yes** in the dialog (Windows) or type `y` then Enter in the terminal (Linux). Both screens show the same 6-digit code: if they differ, refuse — the request does not come from your phone. Without an answer within one minute the pairing is refused. If Tapis runs without a window (Linux service), start it with `tapis --pair` in a terminal to pair.
 
 ## Lock or sleep does nothing (Linux)
 

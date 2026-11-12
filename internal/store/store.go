@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"os"
 	"path/filepath"
 	"sort"
@@ -37,6 +38,7 @@ func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
+	os.Chmod(dir, 0o700) // tighten a folder created earlier with looser rights
 	return &Store{path: filepath.Join(dir, "devices.json")}, nil
 }
 
@@ -81,6 +83,19 @@ func hashKey(key string) string {
 	return hex.EncodeToString(h[:])
 }
 
+// RandomDigits returns n uniformly random decimal digits.
+func RandomDigits(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		v, err := rand.Int(rand.Reader, big.NewInt(10))
+		if err != nil {
+			panic(err)
+		}
+		b[i] = byte('0' + v.Int64())
+	}
+	return string(b)
+}
+
 // Add registers a new device and returns it with its secret key (the
 // key is only ever returned here).
 func (s *Store) Add(name string) (Device, string, error) {
@@ -90,7 +105,7 @@ func (s *Store) Add(name string) (Device, string, error) {
 	if err != nil {
 		return Device{}, "", err
 	}
-	idb := make([]byte, 4)
+	idb := make([]byte, 8)
 	rand.Read(idb)
 	key := RandomToken(32)
 	d := Device{ID: hex.EncodeToString(idb), Name: name, KeyHash: hashKey(key), Created: time.Now().UTC()}

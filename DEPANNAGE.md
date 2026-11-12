@@ -32,6 +32,8 @@ Supprime aussi toute règle au nom du programme Tapis qui le **bloque** dans *Pa
 
 **Le téléphone n'est pas sur le même réseau.** Vérifie que le Wi-Fi est activé et connecté au même réseau que l'ordinateur. Les réseaux invités, d'hôtel, de campus et certains Wi-Fi de café isolent les appareils entre eux (« isolation des clients ») : Tapis ne peut pas y fonctionner. Utilise plutôt le partage de connexion du téléphone : connecte l'ordinateur au point d'accès du téléphone, puis relance Tapis (une nouvelle adresse s'affiche).
 
+**Le téléphone et l'ordinateur sont sur des sous-réseaux différents.** Par sécurité, Tapis ne répond qu'aux appareils du même sous-réseau que l'ordinateur (les trois premiers nombres de l'adresse sont en général identiques, par ex. `192.168.1.x`). Certains systèmes mesh ou routeurs mettent le Wi-Fi et l'Ethernet sur des sous-réseaux différents : connecte les deux appareils au même réseau. Le journal (menu → *Ouvrir le journal*) affiche alors `rejected connection from …`.
+
 **Tapis affiche une mauvaise adresse.** Compare-la avec l'adresse IPv4 de ta carte Wi-Fi/Ethernet donnée par `ipconfig` (Windows) ou `ip addr` (Linux). Si l'ordinateur a plusieurs réseaux, Tapis les liste tous sous « other network » : essaie chacun.
 
 **Un VPN est actif** sur l'ordinateur ou le téléphone. Certains VPN bloquent le réseau local : désactive-le, ou active « autoriser l'accès au réseau local » dans ses réglages.
@@ -51,7 +53,7 @@ Après avoir changé le réglage, recharge la page Tapis.
 
 ## « Confirme sur l'ordinateur » s'affiche et rien ne se passe
 
-Depuis la 0.2.0, chaque nouveau téléphone doit être autorisé sur l'ordinateur : dans la fenêtre Tapis, tape `y` puis Entrée (ou `n` pour refuser). Sans réponse en une minute, l'appairage est refusé. Si Tapis tourne sans fenêtre (service Linux), lance `tapis --pair` dans un terminal pour appairer.
+Chaque nouveau téléphone doit être autorisé sur l'ordinateur : réponds **Oui** dans la boîte de dialogue (Windows) ou tape `y` puis Entrée dans le terminal (Linux). Les deux écrans affichent le même code à 6 chiffres : s'ils diffèrent, refuse, la demande ne vient pas de ton téléphone. Sans réponse en une minute, l'appairage est refusé. Si Tapis tourne sans fenêtre (service Linux), lance `tapis --pair` dans un terminal pour appairer.
 
 ## Verrouiller ou mettre en veille ne fait rien (Linux)
 

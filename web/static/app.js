@@ -22,7 +22,7 @@ const STR = {
     tabPad: 'Trackpad', tabMedia: 'Media', tabSystem: 'Computer', holdHint: 'Hold a button to confirm',
     lock: 'Lock the computer', sleep: 'Put to sleep', autofs: 'Full screen automatically',
     lockDone: 'Computer locked', sleepDone: 'Computer going to sleep',
-    confirmT: 'Confirm on the computer', confirm: 'In the Tapis window, type y then Enter to allow this phone.',
+    confirmT: 'Confirm on the computer', confirm: 'Check that the computer shows the same code, then allow this phone there.',
     refusedT: 'Pairing refused', refused: 'The pairing was refused on the computer (or nobody answered within a minute).\nType p in the Tapis window to try again.',
   },
   fr: {
@@ -40,7 +40,7 @@ const STR = {
     tabPad: 'Trackpad', tabMedia: 'Médias', tabSystem: 'Ordinateur', holdHint: 'Maintiens un bouton pour confirmer',
     lock: 'Verrouiller l’ordinateur', sleep: 'Mettre en veille', autofs: 'Plein écran automatique',
     lockDone: 'Ordinateur verrouillé', sleepDone: 'Mise en veille…',
-    confirmT: 'Confirme sur l’ordinateur', confirm: 'Dans la fenêtre Tapis, tape y puis Entrée pour autoriser ce téléphone.',
+    confirmT: 'Confirme sur l’ordinateur', confirm: 'Vérifie que l’ordinateur affiche le même code, puis autorise ce téléphone là-bas.',
     refusedT: 'Appairage refusé', refused: 'L’appairage a été refusé sur l’ordinateur (ou personne n’a répondu en une minute).\nTape p dans la fenêtre Tapis pour réessayer.',
   },
 };
@@ -81,7 +81,9 @@ if (m) {
   history.replaceState(null, '', location.pathname); // keep the token out of history
 }
 
-function overlay(titleKey, textKey, retry = true) {
+function overlay(titleKey, textKey, retry = true, code = '') {
+  $('#ov-code').hidden = !code;
+  $('#ov-code').textContent = code ? code.slice(0, 3) + ' ' + code.slice(3) : '';
   if (!titleKey) { $('#overlay').hidden = true; return; }
   $('#ov-title').textContent = t(titleKey);
   $('#ov-text').textContent = t(textKey);
@@ -144,7 +146,7 @@ function connect() {
     try { msg = JSON.parse(ev.data); } catch { return; }
     switch (msg.t) {
       case 'confirm':
-        overlay('confirmT', 'confirm', false);
+        overlay('confirmT', 'confirm', false, /^\d{6}$/.test(msg.code || '') ? msg.code : '');
         break;
       case 'paired':
         save('tapis.device', { id: msg.id, key: msg.key });
@@ -604,9 +606,10 @@ window.addEventListener('orientationchange', () => { fullHeight = 0; });
 $('#btn-settings').addEventListener('click', () => { kbd.blur(); $('#settings').showModal(); });
 $('#btn-forget').addEventListener('click', () => {
   if (!confirm(t('forgetQ'))) return;
+  send({ t: 'forget' }); // also remove this phone's key from the computer
   localStorage.removeItem('tapis.device');
   fatal = true;
-  if (ws) ws.close();
+  if (ws) setTimeout(() => ws && ws.close(), 300);
   $('#settings').close();
   overlay('notPairedT', 'notPaired');
 });
