@@ -38,6 +38,18 @@ gh attestation verify tapis-v0.2.0-windows-amd64.exe --repo remigl/tapis
 
 This proves the file was built by this repository's workflow from a public commit, and was not modified afterwards.
 
+## Lock-screen helper (Windows)
+
+Optional, off by default. Windows isolates the lock screen on a secure desktop; only a SYSTEM process on that desktop can type there.
+
+- Enabling it (menu → *Type on the lock screen*) copies Tapis to `C:\Program Files\Tapis\` — writable by administrators only, so a user-level program cannot swap the file — and registers the scheduled task *Tapis lock screen helper*, running as SYSTEM.
+- That task starts an agent in the logged-on session, on the secure desktop. The agent **injects input only while the session is locked** (it checks the session state before every event), so it cannot be used to approve a UAC prompt or a Ctrl+Alt+Del screen of an unlocked session.
+- The agent listens on a local named pipe whose access list allows only SYSTEM and the user logged on in that session; remote clients are rejected, and low-integrity (sandboxed) processes cannot write to it.
+- Before sending anything, Tapis checks that the pipe belongs to a SYSTEM process, so another program cannot pose as the agent to capture what you type.
+- The agent never opens a network connection; all values are bounded as on the network side.
+- Residual risk: a program already running under your account could, while your session is locked, send keystrokes to the lock screen through the pipe. It would still need your PIN (and Windows limits PIN attempts). Disable the helper if you do not need it.
+- Removing it (same menu entry) deletes the task and the files.
+
 ## Audit (version 0.2.0)
 
 A review of the whole code base (server, WebSocket and QR implementations, certificate handling, input injection, phone app, build pipeline) was performed. Findings and fixes:

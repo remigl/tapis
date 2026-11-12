@@ -31,6 +31,13 @@ jobs:
         run: go test -race ./...
       - name: Known vulnerabilities (govulncheck)
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: Windows build with resources (as released)
+        run: |
+          cd cmd/tapis
+          go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64 --icon ../../assets/tapis.ico --manifest gui \
+            --product-name Tapis --product-version 0.0.0.0 --file-version 0.0.0.0
+          GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui" -o /tmp/tapis.exe .
+          rm -f *.syso
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -49,13 +56,26 @@ jobs:
           # Latest stable Go: releases always get the newest standard-library security fixes.
           go-version: stable
 
+      - name: Windows resources (icon, version information, manifest)
+        continue-on-error: true # never block a release for the icon
+        run: |
+          v="${GITHUB_REF_NAME#v}"; v="${v%%-*}.0"
+          cd cmd/tapis
+          go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64,arm64 \
+            --icon ../../assets/tapis.ico --manifest gui \
+            --product-name Tapis --file-description "Tapis - phone trackpad and keyboard" \
+            --product-version "$v" --file-version "$v" --original-filename tapis.exe \
+            --copyright "Remi Gladieu - GPL-3.0"
+
       - name: Build
         run: |
           mkdir dist
           for target in windows/amd64 windows/arm64 linux/amd64 linux/arm64; do
-            os=${target%/*}; arch=${target#*/}; ext=""; [ "$os" = windows ] && ext=".exe"
+            os=${target%/*}; arch=${target#*/}; ext=""; gui=""
+            # Windows: no console window, Tapis lives in the notification area.
+            [ "$os" = windows ] && ext=".exe" && gui="-H windowsgui"
             CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -buildvcs=true \
-              -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
+              -ldflags "-s -w $gui -X main.version=${GITHUB_REF_NAME}" \
               -o "dist/tapis-${GITHUB_REF_NAME}-${os}-${arch}${ext}" ./cmd/tapis
           done
 

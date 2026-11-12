@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"image/png"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/remigl/tapis/internal/firewall"
 	"github.com/remigl/tapis/internal/input"
+	"github.com/remigl/tapis/internal/lockscreen"
 	"github.com/remigl/tapis/internal/media"
 	"github.com/remigl/tapis/internal/qr"
 	"github.com/remigl/tapis/internal/server"
@@ -30,7 +32,10 @@ import (
 
 var version = "dev"
 
-const helpURL = "https://github.com/remigl/tapis/blob/main/TROUBLESHOOTING.md"
+const (
+	helpURL   = "https://github.com/remigl/tapis/blob/main/TROUBLESHOOTING.md"
+	helpURLFR = "https://github.com/remigl/tapis/blob/main/DEPANNAGE.md"
+)
 
 func defaultDir() string {
 	d, err := os.UserConfigDir()
@@ -55,6 +60,17 @@ Flags:
 }
 
 func main() {
+	// Internal modes of the Windows lock-screen helper (see internal/lockscreen).
+	if len(os.Args) == 2 {
+		switch os.Args[1] {
+		case "--lockscreen-service":
+			lockscreen.RunService()
+			return
+		case "--lockscreen-agent":
+			lockscreen.RunAgent()
+			return
+		}
+	}
 	port := flag.Int("port", 47800, "TCP port to listen on")
 	dir := flag.String("config", defaultDir(), "configuration directory")
 	layout := flag.String("layout", "auto", "keyboard layout of this computer, Linux only ("+strings.Join(input.LayoutNames(), ", ")+")")
@@ -64,7 +80,11 @@ func main() {
 	noSmooth := flag.Bool("no-smooth", false, "disable pointer motion smoothing")
 	noFW := flag.Bool("no-firewall", false, "do not configure Windows Firewall automatically")
 	anyNet := flag.Bool("allow-any-network", false, "accept clients from non-private addresses (NOT recommended)")
+	forceConsole := flag.Bool("console", false, "Windows: run in this console instead of the notification area")
 	flag.Usage = usage
+	if len(os.Args) > 1 {
+		attachConsole() // Windows GUI build started from a terminal: print there
+	}
 	flag.Parse()
 
 	switch flag.Arg(0) {
@@ -83,19 +103,37 @@ func main() {
 		os.Exit(2)
 	}
 
-	logger := log.New(os.Stdout, "", log.Ltime)
-	var inj input.Injector
-	if *dry {
-		inj = &input.Logger{W: os.Stdout}
-	} else {
-		var err error
-		if inj, err = input.New(input.Options{Layout: *layout}); err != nil {
+	// On Windows, Tapis normally lives in the notification area; it uses
+	// this console only when started from a terminal (or with --console).
+	gui := guiAvailable() && !interactive() && !*forceConsole
+	if gui && alreadyRunning() {
+		return
+	}
+	var out io.Writer = os.Stdout
+	if gui {
+		out = openLog(*dir)
+	}
+	logger := log.New(out, "", log.Ldate|log.Ltime)
+	fail := func(err error) {
+		if gui {
+			guiError(err)
+		} else {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			fmt.Fprintln(os.Stderr, "Help:", helpURL)
 			pauseIfDoubleClicked()
-			os.Exit(1)
+		}
+		os.Exit(1)
+	}
+	var inj input.Injector
+	if *dry {
+		inj = &input.Logger{W: out}
+	} else {
+		var err error
+		if inj, err = input.New(input.Options{Layout: *layout}); err != nil {
+			fail(err)
 		}
 	}
+	inj = lockscreen.Wrap(inj, logger) // type on the Windows lock screen when the helper is installed
 	defer inj.Close()
 
 	cfg := server.Config{Port: *port, Dir: *dir, Injector: inj, Web: web.FS(), Log: logger,
@@ -106,16 +144,25 @@ func main() {
 			fn(media.Info{Title: "Big Buck Bunny (demo)", Artist: "Blender Foundation", App: "Chrome", Playing: true})
 		}
 	}
-	// New phones must be approved here, in the Tapis window, when someone
-	// is there to answer (an interactive console).
-	if !*noConfirm && interactive() {
+	// New phones must be approved on this computer when someone is there
+	// to answer (a console, or a dialog box in the Windows tray mode).
+	switch {
+	case *noConfirm:
+	case gui:
+		cfg.ConfirmPairing = guiConfirm
+	case interactive():
 		cfg.ConfirmPairing = approvals.ask
+	}
+	if gui {
+		cfg.OnPairingUsed = guiPairingUsed
 	}
 	srv, err := server.New(cfg)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		pauseIfDoubleClicked()
-		os.Exit(1)
+		fail(err)
+	}
+	if gui {
+		runGUI(srv, logger, *port, *dir, *pair, *noFW)
+		return
 	}
 
 	fmt.Printf("\nTapis %s - phone trackpad & keyboard\n\n", version)

@@ -92,9 +92,17 @@ Tapis shows what the system itself knows is playing (the same as the Windows vol
 - **Slideshows** (PowerPoint, photo viewers) are not media players for the system, so nothing is shown. That is expected.
 - On Linux, the title is read through `busctl` (part of systemd).
 
+## Tapis icon not visible (Windows)
+
+Tapis runs in the notification area: click the `^` arrow next to the clock to see the hidden icons. Drag the Tapis icon onto the taskbar to keep it visible. Starting `tapis.exe` again shows the QR code window.
+
+## I can move the pointer on the lock screen but not type (Windows)
+
+That is Windows protecting the lock screen. Right-click the Tapis icon → **Type on the lock screen** and accept the administrator prompt. If it was already enabled and stopped working after an update, untick and tick it again so the helper is updated.
+
 ## The pointer moves but some windows don't react (Windows)
 
-Windows prevents normal programs from controlling programs started **as administrator** (Task Manager, installers, some games), as well as the lock screen, Ctrl+Alt+Del and UAC prompts. Start Tapis as administrator if you need to control those windows.
+Windows prevents normal programs from controlling programs started **as administrator** (Task Manager, installers, some games), as well as Ctrl+Alt+Del and UAC prompts. Start Tapis as administrator if you need to control those windows. For the lock screen, see above.
 
 ## Wrong characters are typed (Linux)
 

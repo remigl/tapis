@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo-256.png" width="128" alt="Tapis logo"></p>
+
 # Tapis
 
 **Ton téléphone devient le trackpad et le clavier de ton ordinateur, uniquement via ton Wi-Fi local.**
@@ -22,10 +24,10 @@ Ordinateurs pris en charge : **Windows 10/11** et **Linux** (X11 et tous les bur
 ## Démarrage rapide
 
 1. Télécharge `tapis` pour ton ordinateur depuis la page [Releases](../../releases) (ou [compile-le](#compiler)).
-2. Lance-le dans un terminal. La première fois, il affiche un QR code.
+2. Lance-le. Sous **Windows**, une fenêtre affiche un QR code, puis Tapis reste dans les icônes cachées à côté de l'horloge. Sous **Linux**, lance-le dans un terminal : il y affiche le QR code.
 3. Scanne le QR code avec l'appareil photo du téléphone, connecté au même Wi-Fi.
 4. Le navigateur avertit que la connexion n'est pas privée. C'est normal : le certificat vient d'être généré par ton ordinateur (voir [Sécurité](#sécurité)). Touche **Paramètres avancés → Continuer**.
-5. Dans la fenêtre Tapis, tape `y` puis Entrée pour autoriser le téléphone.
+5. Autorise le téléphone sur l'ordinateur : **Oui** dans la boîte de dialogue (Windows), ou `y` puis Entrée dans le terminal (Linux).
 6. C'est tout. La prochaine fois, ouvre simplement la même adresse : le téléphone reste appairé. Astuce : « Ajouter à l'écran d'accueil » pour une appli plein écran.
 
 Un souci ? Voir le **[guide de dépannage](DEPANNAGE.md)**.
@@ -46,9 +48,9 @@ Un souci ? Voir le **[guide de dépannage](DEPANNAGE.md)**.
 Touche l'icône clavier : tout ce que tu tapes part vers l'ordinateur.
 Les touches de modification (Ctrl, Alt, ⊞, ⇧) s'appliquent à la touche suivante quand on les touche une fois, et restent **enfoncées** quand on les touche deux fois (pratique pour Alt+Tab : double-touche Alt, touche Tab autant de fois que nécessaire, puis retouche Alt). Avec Ctrl armé, un toucher sur le trackpad fait un Ctrl+clic.
 
-### Commandes du terminal
+### Commandes du terminal (Linux, ou `tapis --console` sous Windows)
 
-Pendant que Tapis tourne, tape dans sa fenêtre :
+Pendant que Tapis tourne dans un terminal, tape :
 
 - `p` + Entrée : nouveau QR code d'appairage (pour ajouter un téléphone)
 - `d` + Entrée : liste des téléphones appairés
@@ -62,10 +64,21 @@ Options : `--port` (47800 par défaut), `--layout` (Linux), `--pair`, `--config`
 
 ### Windows
 
+Tapis vit dans la **zone de notification** (les icônes cachées à côté de l'horloge, `^`). Clique sur son icône pour afficher le QR code d'appairage ; clic droit pour le menu :
+
+- **Afficher le QR code** — pour appairer un téléphone ou retrouver l'adresse.
+- **Lancer au démarrage de Windows** — coche pour que Tapis démarre tout seul à l'ouverture de session.
+- **Taper sur l'écran de verrouillage** — pour taper ton code PIN ou ton mot de passe sur l'écran de verrouillage depuis le téléphone (voir plus bas).
+- **Ouvrir le journal**, **Aide**, **Quitter**.
+
+Relancer `tapis.exe` alors qu'il tourne affiche simplement le QR code. Astuce : glisse l'icône des icônes cachées vers la barre des tâches pour la garder visible.
+
 Lance `tapis-…-windows-amd64.exe`. Au premier lancement, Tapis configure lui-même le pare-feu Windows : Windows demande une seule fois l'autorisation administrateur, réponds **Oui**. La règle n'autorise que ce programme, sur son port, depuis ton réseau local : ça marche donc même si ton Wi-Fi est classé « Public » (`--no-firewall` pour désactiver).
 Pour le démarrer avec Windows, place un raccourci dans `shell:startup`.
 
-Windows empêche un programme normal de contrôler les fenêtres lancées en administrateur (UIPI) ainsi que les écrans Ctrl+Alt+Suppr / UAC. Lance Tapis en administrateur si tu dois contrôler ces applis.
+**Écran de verrouillage.** Windows affiche l'écran de verrouillage sur un bureau protégé où les programmes normaux ne peuvent pas taper (le pointeur bouge, mais les touches sont ignorées). Active *Taper sur l'écran de verrouillage* dans le menu : Tapis installe un petit assistant (une demande administrateur) qui tape **uniquement quand ta session est verrouillée** — jamais sur les demandes d'administrateur (UAC). Détails dans [SECURITY.md](SECURITY.md#lock-screen-helper-windows). Sous Linux, rien à faire : ça marche déjà.
+
+Windows empêche un programme normal de contrôler les fenêtres lancées en administrateur (UIPI). Lance Tapis en administrateur si tu dois contrôler ces applis.
 
 ### Linux
 

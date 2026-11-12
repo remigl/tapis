@@ -13,3 +13,5 @@ func interactive() bool {
 	_, _, e := syscall.Syscall(syscall.SYS_IOCTL, 0, syscall.TCGETS, uintptr(unsafe.Pointer(&t)))
 	return e == 0
 }
+
+func attachConsole() {}

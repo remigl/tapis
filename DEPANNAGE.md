@@ -92,9 +92,17 @@ Tapis affiche ce que le système lui-même sait être en lecture (comme l'encart
 - **Les diaporamas** (PowerPoint, visionneuses de photos) ne sont pas des lecteurs média pour le système : rien ne s'affiche, c'est normal.
 - Sous Linux, le titre est lu via `busctl` (fourni avec systemd).
 
+## L'icône de Tapis n'est pas visible (Windows)
+
+Tapis tourne dans la zone de notification : clique sur la flèche `^` à côté de l'horloge pour voir les icônes cachées. Glisse l'icône de Tapis sur la barre des tâches pour la garder visible. Relancer `tapis.exe` affiche la fenêtre du QR code.
+
+## Je peux bouger le pointeur sur l'écran de verrouillage mais pas taper (Windows)
+
+C'est Windows qui protège l'écran de verrouillage. Clic droit sur l'icône de Tapis → **Taper sur l'écran de verrouillage**, et accepte la demande administrateur. Si c'était déjà activé et que ça ne marche plus après une mise à jour, décoche puis recoche pour mettre l'assistant à jour.
+
 ## Le pointeur bouge mais certaines fenêtres ne réagissent pas (Windows)
 
-Windows empêche les programmes normaux de contrôler ceux lancés **en administrateur** (Gestionnaire des tâches, installateurs, certains jeux), ainsi que l'écran de verrouillage, Ctrl+Alt+Suppr et les demandes UAC. Lance Tapis en administrateur si tu dois contrôler ces fenêtres.
+Windows empêche les programmes normaux de contrôler ceux lancés **en administrateur** (Gestionnaire des tâches, installateurs, certains jeux), ainsi que Ctrl+Alt+Suppr et les demandes UAC. Lance Tapis en administrateur si tu dois contrôler ces fenêtres. Pour l'écran de verrouillage, voir plus haut.
 
 ## De mauvais caractères sont tapés (Linux)
 
