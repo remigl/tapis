@@ -2,6 +2,7 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"crypto/subtle"
 	"crypto/tls"
@@ -19,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode"
 
@@ -122,24 +124,72 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 	mux.Handle("/", http.FileServer(http.FS(s.cfg.Web)))
 
+	tlsConf := &tls.Config{
+		MinVersion:   tls.VersionTLS13,
+		Certificates: []tls.Certificate{s.Identity.TLS},
+		NextProtos:   []string{"http/1.1"},
+	}
 	srv := &http.Server{
-		Addr:    ":" + strconv.Itoa(s.cfg.Port),
 		Handler: s.guard(mux),
-		TLSConfig: &tls.Config{
-			MinVersion:   tls.VersionTLS13,
-			Certificates: []tls.Certificate{s.Identity.TLS},
-			NextProtos:   []string{"http/1.1"},
-		},
 		// HTTP/1.1 only: WebSockets over HTTP/2 (RFC 8441) are not needed.
 		TLSNextProto:      map[string]func(*http.Server, *tls.Conn, http.Handler){},
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		ErrorLog:          log.New(io.Discard, "", 0), // TLS handshake noise from untrusted-cert probes
 	}
+	// Someone typing the address without "https://" gets redirected
+	// instead of a confusing error. Both protocols share the same port.
+	redirect := &http.Server{
+		Handler: s.guard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusFound)
+		})),
+		ReadHeaderTimeout: 10 * time.Second,
+		ErrorLog:          log.New(io.Discard, "", 0),
+	}
+
+	ln, err := net.Listen("tcp", ":"+strconv.Itoa(s.cfg.Port))
+	if err != nil {
+		if errors.Is(err, syscall.EADDRINUSE) || strings.Contains(err.Error(), "address already in use") ||
+			strings.Contains(err.Error(), "Only one usage") {
+			return fmt.Errorf("port %d is already in use. Is Tapis already running in another window? "+
+				"Close it, or start Tapis with another port, e.g. --port 47801", s.cfg.Port)
+		}
+		return err
+	}
+	tlsLn, httpLn := newChanListener(ln.Addr()), newChanListener(ln.Addr())
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				tlsLn.Close()
+				httpLn.Close()
+				return
+			}
+			go func() {
+				c.SetReadDeadline(time.Now().Add(10 * time.Second))
+				br := bufio.NewReader(c)
+				first, err := br.Peek(1)
+				c.SetReadDeadline(time.Time{})
+				if err != nil {
+					c.Close()
+					return
+				}
+				pc := &peekConn{Conn: c, r: br}
+				if first[0] == 0x16 { // TLS handshake record
+					tlsLn.push(tls.Server(pc, tlsConf))
+				} else {
+					httpLn.push(pc)
+				}
+			}()
+		}
+	}()
+
 	go func() {
 		<-ctx.Done()
+		ln.Close()
 		sctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
+		redirect.Shutdown(sctx)
 		srv.Shutdown(sctx)
 		s.mu.Lock()
 		for sess := range s.sessions {
@@ -147,12 +197,57 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		s.mu.Unlock()
 	}()
-	err := srv.ListenAndServeTLS("", "")
-	if errors.Is(err, http.ErrServerClosed) {
+	go redirect.Serve(httpLn)
+	err = srv.Serve(tlsLn)
+	if errors.Is(err, http.ErrServerClosed) || errors.Is(err, net.ErrClosed) || ctx.Err() != nil {
 		return nil
 	}
 	return err
 }
+
+// peekConn is a connection whose first bytes were already buffered.
+type peekConn struct {
+	net.Conn
+	r *bufio.Reader
+}
+
+func (c *peekConn) Read(p []byte) (int, error) { return c.r.Read(p) }
+
+// chanListener hands connections sorted by the accept loop to an http.Server.
+type chanListener struct {
+	addr net.Addr
+	ch   chan net.Conn
+	done chan struct{}
+	once sync.Once
+}
+
+func newChanListener(a net.Addr) *chanListener {
+	return &chanListener{addr: a, ch: make(chan net.Conn), done: make(chan struct{})}
+}
+
+func (l *chanListener) push(c net.Conn) {
+	select {
+	case l.ch <- c:
+	case <-l.done:
+		c.Close()
+	}
+}
+
+func (l *chanListener) Accept() (net.Conn, error) {
+	select {
+	case c := <-l.ch:
+		return c, nil
+	case <-l.done:
+		return nil, net.ErrClosed
+	}
+}
+
+func (l *chanListener) Close() error {
+	l.once.Do(func() { close(l.done) })
+	return nil
+}
+
+func (l *chanListener) Addr() net.Addr { return l.addr }
 
 func remoteIP(r *http.Request) net.IP {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

@@ -24,6 +24,8 @@ Ordinateurs pris en charge : **Windows 10/11** et **Linux** (X11 et tous les bur
 4. Le navigateur avertit que la connexion n'est pas privée. C'est normal : le certificat vient d'être généré par ton ordinateur (voir [Sécurité](#sécurité)). Touche **Paramètres avancés → Continuer**.
 5. C'est tout. La prochaine fois, ouvre simplement la même adresse : le téléphone reste appairé. Astuce : « Ajouter à l'écran d'accueil » pour une appli plein écran.
 
+Un souci ? Voir le **[guide de dépannage](DEPANNAGE.md)**.
+
 ### Gestes
 
 | Geste | Action |
@@ -57,7 +59,7 @@ Options : `--port` (47800 par défaut), `--layout` (Linux), `--pair`, `--config`
 
 ### Windows
 
-Lance `tapis-…-windows-amd64.exe`. Le pare-feu Windows demande l'autorisation : autorise uniquement les **réseaux privés**.
+Lance `tapis-…-windows-amd64.exe`. Au premier lancement, Tapis configure lui-même le pare-feu Windows : Windows demande une seule fois l'autorisation administrateur, réponds **Oui**. La règle n'autorise que ce programme, sur son port, depuis ton réseau local : ça marche donc même si ton Wi-Fi est classé « Public » (`--no-firewall` pour désactiver).
 Pour le démarrer avec Windows, place un raccourci dans `shell:startup`.
 
 Windows empêche un programme normal de contrôler les fenêtres lancées en administrateur (UIPI) ainsi que les écrans Ctrl+Alt+Suppr / UAC. Lance Tapis en administrateur si tu dois contrôler ces applis.
@@ -83,6 +85,7 @@ Si tu utilises `ufw`/`firewalld`, ouvre le port TCP 47800 pour ton réseau local
 
 Modèle de menace : quelqu'un d'autre sur le même Wi-Fi (café, colocation, réseau invité) qui voudrait contrôler ton ordinateur ou lire ce que tu tapes.
 
+- **Pare-feu.** Sous Windows, la règle de pare-feu de Tapis est limitée à son programme, son port et le sous-réseau local.
 - **Local uniquement.** Le serveur refuse tout client dont l'adresse n'est pas privée (192.168.x, 10.x, 172.16–31.x, lien local, boucle locale). Aucune requête ne sort de ton réseau ; la web-app a une Content-Security-Policy stricte et ne charge aucune ressource externe.
 - **Chiffrement.** TLS 1.3 uniquement. Au premier lancement, Tapis crée une petite autorité de certification sur ton ordinateur, **limitée aux adresses privées** (name constraints), et un certificat serveur signé par elle. Même si sa clé fuitait, elle ne pourrait pas usurper un vrai site web.
 - **Appairage.** Le QR code contient un jeton aléatoire de 128 bits, à usage unique, valable 5 minutes. Il est placé après le `#` de l'URL : il n'est jamais envoyé dans une requête HTTP ni gardé dans l'historique. Après l'appairage, le téléphone reçoit sa propre clé de 256 bits ; l'ordinateur n'en garde que l'empreinte SHA-256.

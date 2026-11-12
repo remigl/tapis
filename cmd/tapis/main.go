@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/remigl/tapis/internal/firewall"
 	"github.com/remigl/tapis/internal/input"
 	"github.com/remigl/tapis/internal/qr"
 	"github.com/remigl/tapis/internal/server"
@@ -25,6 +26,8 @@ import (
 )
 
 var version = "dev"
+
+const helpURL = "https://github.com/remigl/tapis/blob/main/TROUBLESHOOTING.md"
 
 func defaultDir() string {
 	d, err := os.UserConfigDir()
@@ -54,6 +57,7 @@ func main() {
 	layout := flag.String("layout", "auto", "keyboard layout of this computer, Linux only ("+strings.Join(input.LayoutNames(), ", ")+")")
 	pair := flag.Bool("pair", false, "show a pairing QR code at startup even if phones are already paired")
 	dry := flag.Bool("dry-run", false, "print input events instead of injecting them")
+	noFW := flag.Bool("no-firewall", false, "do not configure Windows Firewall automatically")
 	anyNet := flag.Bool("allow-any-network", false, "accept clients from non-private addresses (NOT recommended)")
 	flag.Usage = usage
 	flag.Parse()
@@ -82,6 +86,8 @@ func main() {
 		var err error
 		if inj, err = input.New(input.Options{Layout: *layout}); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
+			fmt.Fprintln(os.Stderr, "Help:", helpURL)
+			pauseIfDoubleClicked()
 			os.Exit(1)
 		}
 	}
@@ -90,6 +96,7 @@ func main() {
 	srv, err := server.New(server.Config{Port: *port, Dir: *dir, Injector: inj, Web: web.FS(), Log: logger, AllowAnyNetwork: *anyNet})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
+		pauseIfDoubleClicked()
 		os.Exit(1)
 	}
 
@@ -103,6 +110,23 @@ func main() {
 	fmt.Println("  Certificate:  SHA-256", srv.Identity.Fingerprint())
 	fmt.Println("  Authority:    SHA-256", srv.Identity.CAFingerprint())
 	fmt.Println("  Config dir:  ", *dir)
+	if !*noFW {
+		st, err := firewall.Ensure(*port, func() {
+			fmt.Println()
+			fmt.Println("  Windows Firewall must allow phones on your local network to reach Tapis.")
+			fmt.Println("  Windows will ask for administrator permission (first time only).")
+			fmt.Println("  The rule only allows this program, on port", *port, "and from your local network.")
+		})
+		switch st {
+		case firewall.AlreadyOK:
+			fmt.Println("  Firewall:     OK (local network only)")
+		case firewall.Configured:
+			fmt.Println("  Firewall:     configured (local network only)")
+		case firewall.Failed:
+			fmt.Println("  Firewall:     NOT configured:", err)
+			fmt.Println("                Your phone may not be able to connect. See", helpURL)
+		}
+	}
 	fmt.Println()
 
 	devs, _ := srv.Store.List()
@@ -119,6 +143,8 @@ func main() {
 
 	if err := srv.Run(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
+		fmt.Fprintln(os.Stderr, "Help:", helpURL)
+		pauseIfDoubleClicked()
 		os.Exit(1)
 	}
 }
@@ -145,8 +171,9 @@ func showPairing(srv *server.Server, dir string) {
 		fmt.Println("  QR image:", pngPath)
 	}
 	fmt.Println("  This code works once and expires in 5 minutes.")
-	fmt.Println("  Your browser will warn about the certificate the first time: this is expected,")
-	fmt.Println("  the certificate was generated on this computer. See README > Security.")
+	fmt.Println("  The phone must be on the same Wi-Fi. Open the link in Chrome (or Safari on iPhone).")
+	fmt.Println("  The browser warns about the certificate the first time: this is expected, it was")
+	fmt.Println("  generated on this computer. Tap Advanced > Proceed. Problems? " + helpURL)
 	fmt.Println()
 }
 

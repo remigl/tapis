@@ -1,0 +1,103 @@
+# Troubleshooting
+
+[Français](DEPANNAGE.md)
+
+Start with the checklist, it solves most problems in a minute. Then look for your symptom below.
+
+## Quick checklist
+
+1. Tapis is running on the computer and its window shows `Firewall: OK` (Windows).
+2. The phone is on the **same Wi-Fi network** as the computer (not on mobile data, not on a "guest" network).
+3. You open the address shown by Tapis (`https://192.168.x.x:47800`) **in Chrome** (Android) or **Safari** (iPhone).
+4. On the certificate warning, you tapped **Advanced → Proceed**.
+
+To test the computer side alone, open `https://localhost:47800` in a browser on the computer. If the dark Tapis page appears, Tapis works and the problem is between the phone and the computer.
+
+---
+
+## The page stays white / keeps loading, or "This site can't be reached"
+
+The phone cannot reach the computer. Causes, from most to least likely:
+
+**Windows Firewall blocks Tapis.** Since version 0.1.1 Tapis configures the firewall itself: at the first start Windows asks for administrator permission, answer **Yes**. If you answered No, or the window shows `Firewall: NOT configured`, close Tapis and start it again to get the prompt back.
+The rule Tapis creates is narrow: this program only, its port only, and only from your local network, so it is safe on any network.
+Manual fix (PowerShell **as administrator**; adapt the path):
+```powershell
+New-NetFirewallRule -DisplayName "Tapis (TCP 47800, local network)" -Direction Inbound -Action Allow `
+  -Program "C:\path\to\tapis.exe" -Protocol TCP -LocalPort 47800 -RemoteAddress LocalSubnet -Profile Any
+```
+Also remove any rule named after the Tapis program that **blocks** it in *Windows Defender Firewall → Advanced settings → Inbound rules*: a block rule always wins.
+
+**Another security program filters the network** (Norton, McAfee, Kaspersky, Bitdefender, ESET…). They replace Windows Firewall: allow `tapis.exe` for the local network in their settings.
+
+**The phone is not on the same network.** Check that Wi-Fi is on and connected to the same network as the computer. Guest networks, hotel, campus and some café Wi-Fi isolate devices from each other ("client isolation"): Tapis cannot work there. Use your phone's hotspot instead: connect the computer to the phone's hotspot, then start Tapis again (a new address is shown).
+
+**Tapis shows the wrong address.** Compare with the IPv4 address of your Wi-Fi/Ethernet adapter given by `ipconfig` (Windows) or `ip addr` (Linux). If the computer has several networks, Tapis lists them all under "other network": try each one.
+
+**A VPN is active** on the computer or the phone. Some VPNs block local network access: disable it, or enable "allow LAN access" in the VPN settings.
+
+**Linux firewall.** If you use ufw: `sudo ufw allow from 192.168.0.0/16 to any port 47800 proto tcp` (adapt to your network). firewalld: `sudo firewall-cmd --zone=home --add-port=47800/tcp --permanent && sudo firewall-cmd --reload` and make sure your Wi-Fi is in the `home` zone.
+
+## The page stays white right after scanning, but works when typed in Chrome
+
+The camera app opened the link in its built-in viewer, which cannot show the certificate warning. In the camera or Google Lens, choose **Open in Chrome** (⋮ menu), or copy the address shown by Tapis into Chrome.
+
+## "Your connection is not private" / NET::ERR_CERT_AUTHORITY_INVALID
+
+Expected the first time: the certificate was created by your computer, not by a public authority. Tap **Advanced → Proceed to …**. Your browser remembers the choice.
+You will see it again when the computer's address changes (another network) — that's normal. If it appears again **on the same network** without you resetting Tapis, do not continue: someone may be intercepting the connection.
+To get rid of the warning for good, install Tapis' certificate on the phone: see [README › Security](README.md#security).
+
+## "Pairing failed": the code was already used or has expired
+
+A QR code works once and for 5 minutes. In the Tapis window type `p` then Enter, and scan the new code.
+
+## "Not paired" when opening the address
+
+This browser has never been paired (or its data was cleared, or you use another browser / private tab). Show a new code with `p` + Enter and scan it. Each browser is paired separately.
+
+## "Phone not paired anymore"
+
+The phone was unpaired with `tapis revoke` or `r <id>`, or the configuration folder was deleted. Pair it again with a new code.
+
+## "Computer unreachable" after it worked
+
+Tapis was closed, the computer went to sleep, or one of the devices changed network. Restart Tapis, wake the computer, check the Wi-Fi, then tap **Retry**.
+
+## The pointer moves but some windows don't react (Windows)
+
+Windows prevents normal programs from controlling programs started **as administrator** (Task Manager, installers, some games), as well as the lock screen, Ctrl+Alt+Del and UAC prompts. Start Tapis as administrator if you need to control those windows.
+
+## Wrong characters are typed (Linux)
+
+Tapis must know your keyboard layout. It reads it from the system; if it guesses wrong, start it with `--layout be` (Belgian AZERTY), `--layout fr` (French AZERTY) or `--layout us`.
+Characters that are not on your layout are typed with Ctrl+Shift+U; this works in most GTK/Qt applications but not everywhere.
+
+## "cannot open /dev/uinput: permission denied" (Linux)
+
+Install the udev rule once, then log out and back in:
+```sh
+sudo cp packaging/linux/60-tapis-uinput.rules /etc/udev/rules.d/
+echo uinput | sudo tee /etc/modules-load.d/uinput.conf
+sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger
+```
+
+## "port 47800 is already in use"
+
+Tapis is already running (maybe in another window or in the background), or another program uses that port. Close the other Tapis, or start with `--port 47801` and pair again.
+
+## Windows says "Windows protected your PC" (SmartScreen) or the antivirus warns
+
+Tapis is not signed with a paid certificate, so Windows does not know it. Click **More info → Run anyway**. You can check the file against `SHA256SUMS` in the release, or build it yourself from the source code.
+
+## The window closes immediately (Windows)
+
+Since version 0.1.1 the window stays open and shows the error. With an older version, open a terminal (`cmd`), go to the folder and start `tapis.exe` from there to read the message.
+
+## The phone screen turns off while I use it
+
+Keeping the screen on needs a trusted certificate. Either install Tapis' certificate (see README › Security) or increase the screen timeout in the phone settings.
+
+---
+
+Still stuck? [Open an issue](https://github.com/remigl/tapis/issues) with: your system (Windows/Linux version), what the Tapis window shows, and what you see on the phone. Never post your pairing link or the content of the configuration folder.
