@@ -15,6 +15,7 @@
 - **Media remote.** Big previous / play-pause / next and volume buttons in their own tab, with the title of what is playing (YouTube video, song, film…).
 - **Computer controls.** Lock the computer or put it to sleep (hold to confirm).
 - **Smooth.** Pointer motion is interpolated on the computer, so it glides even on 144 Hz screens. Full screen in one tap.
+- **Keyboard opens by itself** when you click a text field on the computer (Windows). App in English or French, your choice.
 - **Your phone's own keyboard.** Works with predictive and swipe typing (Gboard, SwiftKey, Samsung), accents and emoji, plus a bar with Esc, Tab, Ctrl/Alt/Win/Shift, arrows, F-keys, media and volume keys.
 - **One small binary, zero dependencies.** Written in Go using only the standard library; easy to audit.
 - **Free software** under the GPL-3.0.
@@ -66,6 +67,7 @@ Options: `--port` (default 47800), `--layout` (Linux), `--pair`, `--config`, `--
 
 Tapis lives in the **notification area** (the hidden icons next to the clock, `^`). Click its icon to show the pairing QR code; right-click for the menu:
 
+- The phones connected right now, with their names.
 - **Show the QR code** — to pair a phone or find the address again.
 - **Start with Windows** — tick to launch Tapis automatically when you log in.
 - **Type on the lock screen** — lets you type your PIN or password on the lock screen from the phone (see below).
@@ -91,6 +93,8 @@ sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger
 ```
 
 Then log out and back in. Install the binary, e.g. `install -m755 tapis ~/.local/bin/`.
+
+**Tray icon.** On KDE Plasma, XFCE, Cinnamon, MATE, LXQt and Budgie, Tapis shows an icon in the system tray (GNOME: install the *AppIndicator and KStatusNotifierItem Support* extension). Its menu lists the connected phones and offers *Show the QR code*, *Start at login*, help and quit. Without a terminal, new phones are approved in a dialog box (needs `zenity` or `kdialog`; without them pairing is refused, for safety — start `tapis` in a terminal to pair).
 To start it with your session, see [`packaging/linux/tapis.service`](packaging/linux/tapis.service).
 
 **Keyboard layout.** uinput sends physical keys, so Tapis must know your layout to type characters. It reads it from the system (`/etc/default/keyboard`, `/etc/vconsole.conf`) or you can pass `--layout`. Built-in: `us`, `fr`, `be`. Characters that are not on your layout are typed with the Ctrl+Shift+U Unicode method (GTK/Qt/IBus apps). New layouts are a few lines in [`internal/input/layouts.go`](internal/input/layouts.go): contributions welcome.

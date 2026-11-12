@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/remigl/tapis/internal/firewall"
+	"github.com/remigl/tapis/internal/focus"
 	"github.com/remigl/tapis/internal/input"
 	"github.com/remigl/tapis/internal/lockscreen"
 	"github.com/remigl/tapis/internal/media"
@@ -111,7 +112,7 @@ func main() {
 		return
 	}
 	var out io.Writer = os.Stdout
-	if gui {
+	if gui || stdoutDiscarded() { // e.g. started from the desktop: nothing would see the output
 		out = openLog(*dir)
 	}
 	logger := log.New(out, "", log.Ldate|log.Ltime)
@@ -139,8 +140,14 @@ func main() {
 
 	cfg := server.Config{Port: *port, Dir: *dir, Injector: inj, Web: web.FS(), Log: logger,
 		AllowAnyNetwork: *anyNet, Smooth: !*noSmooth, OnPairingUsed: func() { removeQR(*dir) }}
+	if p := focus.New(); p != nil {
+		cfg.Focus = p
+	}
 	if *dry {
 		cfg.SystemAction = func(a system.Action) error { fmt.Println("[system]", a); return nil }
+		if os.Getenv("TAPIS_DRYRUN_FOCUS") != "" { // test hook: pretend a text field is focused
+			cfg.Focus = fakeFocus{}
+		}
 		cfg.MediaWatch = func(ctx context.Context, fn func(media.Info)) {
 			fn(media.Info{Title: "Big Buck Bunny (demo)", Artist: "Blender Foundation", App: "Chrome", Playing: true})
 		}
@@ -153,7 +160,10 @@ func main() {
 		cfg.ConfirmPairing = guiConfirm
 	case interactive():
 		cfg.ConfirmPairing = approvals.ask
+	default:
+		cfg.ConfirmPairing = desktopConfirm // Linux without a terminal: a dialog box
 	}
+	cfg.OnSessionsChanged = func() { trayRefresh() }
 	if gui {
 		cfg.OnPairingUsed = guiPairingUsed
 	}
@@ -205,6 +215,7 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	startTray(srv, logger, *dir, cancel) // Linux: icon in the system tray, when available
 	defer removeQR(*dir)
 	go console(ctx, cancel, srv, *dir)
 
@@ -393,3 +404,8 @@ func (a *approver) answer(line string) bool {
 	a.mu.Unlock()
 	return true
 }
+
+type fakeFocus struct{}
+
+func (fakeFocus) Editable() bool { return true }
+func (fakeFocus) Close()         {}

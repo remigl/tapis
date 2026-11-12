@@ -102,6 +102,17 @@ Tapis tourne dans la zone de notification : clique sur la flèche `^` à côté 
 
 C'est Windows qui protège l'écran de verrouillage. Clic droit sur l'icône de Tapis → **Taper sur l'écran de verrouillage**, et accepte la demande administrateur. Si c'était déjà activé et que ça ne marche plus après une mise à jour, décoche puis recoche pour mettre l'assistant à jour.
 
+## Le clavier du téléphone ne s'ouvre pas tout seul
+
+- L'option est dans les réglages de l'appli : *Ouvrir le clavier quand un champ de texte est sélectionné sur l'ordinateur*.
+- Ça fonctionne sous **Windows**, grâce aux informations d'accessibilité des applications (comme le clavier tactile de Windows). La plupart des applications et tous les grands navigateurs les fournissent ; quelques-unes non (certains jeux, des applis très anciennes ou dessinées à la main, des applis lancées en administrateur alors que Tapis ne l'est pas) : ouvre alors le clavier avec le bouton.
+- Le clavier s'ouvre juste après un clic depuis le téléphone : les navigateurs interdisent à une page de l'ouvrir d'elle-même à un autre moment.
+- Sous Linux, ce n'est pas encore disponible : utilise le bouton clavier.
+
+## Pas d'icône dans la barre système sous Linux
+
+GNOME a besoin de l'extension *AppIndicator and KStatusNotifierItem Support*. Les autres bureaux l'affichent directement. Sans barre système, Tapis continue de fonctionner dans le terminal.
+
 ## Le pointeur bouge mais certaines fenêtres ne réagissent pas (Windows)
 
 Windows empêche les programmes normaux de contrôler ceux lancés **en administrateur** (Gestionnaire des tâches, installateurs, certains jeux), ainsi que Ctrl+Alt+Suppr et les demandes UAC. Lance Tapis en administrateur si tu dois contrôler ces fenêtres. Pour l'écran de verrouillage, voir plus haut.

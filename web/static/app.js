@@ -11,6 +11,8 @@ const STR = {
     connecting: 'Connecting…', settings: 'Settings', speed: 'Pointer speed', accel: 'Acceleration',
     scroll: 'Scroll speed', natural: 'Natural scrolling', inertia: 'Scroll inertia', tap: 'Tap to click',
     haptic: 'Vibration feedback', fullscreen: 'Full screen', cert: 'Download certificate',
+    language: 'Language', langAuto: 'Automatic (phone language)',
+    autokbd: 'Open the keyboard when a text field is selected on the computer',
     forget: 'Forget this computer', done: 'Done', retry: 'Retry', about: 'Tapis · free software (GPL-3.0)',
     hint1: 'One finger: move · Tap: click', hint2: 'Two fingers: scroll · Two-finger tap: right click',
     hint3: 'Tap then hold and move: drag',
@@ -29,6 +31,8 @@ const STR = {
     connecting: 'Connexion…', settings: 'Réglages', speed: 'Vitesse du pointeur', accel: 'Accélération',
     scroll: 'Vitesse de défilement', natural: 'Défilement naturel', inertia: 'Inertie du défilement',
     tap: 'Toucher pour cliquer', haptic: 'Vibrations', fullscreen: 'Plein écran', cert: 'Télécharger le certificat',
+    language: 'Langue', langAuto: 'Automatique (langue du téléphone)',
+    autokbd: 'Ouvrir le clavier quand un champ de texte est sélectionné sur l’ordinateur',
     forget: 'Oublier cet ordinateur', done: 'OK', retry: 'Réessayer', about: 'Tapis · logiciel libre (GPL-3.0)',
     hint1: 'Un doigt : déplacer · Toucher : clic', hint2: 'Deux doigts : défiler · Toucher à deux doigts : clic droit',
     hint3: 'Toucher puis maintenir et glisser : glisser-déposer',
@@ -44,13 +48,23 @@ const STR = {
     refusedT: 'Appairage refusé', refused: 'L’appairage a été refusé sur l’ordinateur (ou personne n’a répondu en une minute).\nTape p dans la fenêtre Tapis pour réessayer.',
   },
 };
-const LANG = (navigator.language || 'en').toLowerCase().startsWith('fr') ? 'fr' : 'en';
+const systemLang = () => ((navigator.language || 'en').toLowerCase().startsWith('fr') ? 'fr' : 'en');
+let LANG = 'en';
 const t = (k) => STR[LANG][k] ?? STR.en[k] ?? k;
-document.documentElement.lang = LANG;
-$$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+let shownOverlay = null; // [titleKey, textKey] of the overlay on screen, to re-translate it
+function applyLanguage(choice) {
+  LANG = choice === 'en' || choice === 'fr' ? choice : systemLang();
+  document.documentElement.lang = LANG;
+  $$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  if (shownOverlay && !$('#overlay').hidden) {
+    $('#ov-title').textContent = t(shownOverlay[0]);
+    $('#ov-text').textContent = t(shownOverlay[1]);
+  }
+}
+applyLanguage((() => { try { return localStorage.getItem('tapis.lang'); } catch { return null; } })());
 
 // ---------- settings ----------
-const DEFAULTS = { speed: 1.6, accel: 1, scroll: 1, natural: true, inertia: true, tap: true, autofs: true, haptic: true };
+const DEFAULTS = { speed: 1.6, accel: 1, scroll: 1, natural: true, inertia: true, tap: true, autofs: true, autokbd: true, haptic: true };
 const settings = { ...DEFAULTS, ...load('tapis.settings', {}) };
 function load(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }
 function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } }
@@ -64,6 +78,14 @@ for (const [k, v] of Object.entries(DEFAULTS)) {
     save('tapis.settings', settings);
   });
 }
+
+const langSelect = $('#s-lang');
+try { langSelect.value = localStorage.getItem('tapis.lang') || 'auto'; } catch { langSelect.value = 'auto'; }
+langSelect.addEventListener('change', () => {
+  try { localStorage.setItem('tapis.lang', langSelect.value); } catch { /* private mode */ }
+  applyLanguage(langSelect.value);
+  if (!connected) $('#host').textContent = t('connecting');
+});
 
 const haptic = (ms = 8) => { if (settings.haptic && navigator.vibrate) navigator.vibrate(ms); };
 
@@ -84,6 +106,7 @@ if (m) {
 function overlay(titleKey, textKey, retry = true, code = '') {
   $('#ov-code').hidden = !code;
   $('#ov-code').textContent = code ? code.slice(0, 3) + ' ' + code.slice(3) : '';
+  shownOverlay = titleKey ? [titleKey, textKey] : null;
   if (!titleKey) { $('#overlay').hidden = true; return; }
   $('#ov-title').textContent = t(titleKey);
   $('#ov-text').textContent = t(textKey);
@@ -154,6 +177,9 @@ function connect() {
       case 'media':
         showNowPlaying(msg);
         break;
+      case 'focus':
+        computerFocus(!!msg.edit);
+        break;
       case 'sys':
         toast(t(msg.a === 'lock' ? 'lockDone' : 'sleepDone'));
         break;
@@ -163,6 +189,7 @@ function connect() {
         overlay(null);
         setStatus('ok', msg.host || 'Tapis');
         requestWakeLock();
+        sendPrefs();
         break;
       case 'error':
         fatal = true;
@@ -534,9 +561,33 @@ kbd.addEventListener('blur', () => setKeyboard(false));
 
 $('#btn-kbd').addEventListener('pointerdown', (e) => e.preventDefault()); // don't steal focus
 $('#btn-kbd').addEventListener('click', () => {
+  autoOpened = false;
   if (document.activeElement === kbd) kbd.blur();
   else { showTab('pad'); kbd.focus(); resetField(); }
 });
+
+// ---------- open the keyboard when a text field is focused on the computer ----------
+// The computer reports whether its focused element accepts text. Browsers
+// only let a page show the keyboard shortly after a touch, which is the
+// case here: the field was just clicked from the trackpad.
+let autoOpened = false;
+function sendPrefs() { send({ t: 'prefs', focus: !!settings.autokbd }); }
+$('#s-autokbd').addEventListener('change', sendPrefs);
+let lastTouch = 0;
+document.addEventListener('pointerup', () => { lastTouch = performance.now(); }, { capture: true });
+function computerFocus(edit) {
+  if (!settings.autokbd || $('#settings').open) return;
+  // Only right after a touch on the phone: the field was just clicked.
+  if (edit && document.activeElement !== kbd && performance.now() - lastTouch < 4000) {
+    showTab('pad');
+    kbd.focus({ preventScroll: true });
+    resetField();
+    autoOpened = true;
+  } else if (!edit && autoOpened && document.activeElement === kbd) {
+    kbd.blur();
+    autoOpened = false;
+  }
+}
 
 // ---------- tabs ----------
 function showTab(name) {

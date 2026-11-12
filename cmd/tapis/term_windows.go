@@ -27,3 +27,9 @@ func attachConsole() {
 		os.Stdin = f
 	}
 }
+
+// terminalOut reports whether standard output is a console.
+func terminalOut() bool {
+	var mode uint32
+	return syscall.GetConsoleMode(syscall.Handle(os.Stdout.Fd()), &mode) == nil
+}

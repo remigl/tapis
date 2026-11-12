@@ -25,6 +25,7 @@ import (
 	"unicode"
 
 	"github.com/remigl/tapis/internal/certs"
+	"github.com/remigl/tapis/internal/focus"
 	"github.com/remigl/tapis/internal/input"
 	"github.com/remigl/tapis/internal/media"
 	"github.com/remigl/tapis/internal/store"
@@ -54,6 +55,10 @@ type Config struct {
 	SystemAction func(system.Action) error
 	// MediaWatch reports what is playing (defaults to media.Watch).
 	MediaWatch func(context.Context, func(media.Info))
+	// Focus tells whether a text field has the focus (nil: unsupported).
+	Focus focus.Probe
+	// OnSessionsChanged is called when a phone connects or disconnects.
+	OnSessionsChanged func()
 }
 
 // Server serves the phone web app and the control WebSocket.
@@ -68,6 +73,9 @@ type Server struct {
 	mover       *mover
 	nowPlaying  media.Info
 	mediaStop   context.CancelFunc
+	focusStop   context.CancelFunc
+	focusKick   chan struct{}
+	focusEdit   bool
 	pairToken   string
 	pairExpires time.Time
 	fails       map[string]*failInfo
@@ -563,6 +571,29 @@ func (s *Server) Sessions() []string {
 	return n
 }
 
+// Connected returns the names of the connected phones, one entry per
+// phone (with a count when the same phone has several pages open).
+func (s *Server) Connected() []string {
+	s.mu.Lock()
+	count := map[string]int{}
+	names := map[string]string{}
+	for sess := range s.sessions {
+		count[sess.dev.ID]++
+		names[sess.dev.ID] = sess.dev.Name
+	}
+	s.mu.Unlock()
+	var out []string
+	for id, n := range count {
+		if n > 1 {
+			out = append(out, fmt.Sprintf("%s (%d)", names[id], n))
+		} else {
+			out = append(out, names[id])
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // Disconnect closes the sessions of a device (after revocation).
 func (s *Server) Disconnect(id string) {
 	s.mu.Lock()
@@ -605,13 +636,15 @@ type message struct {
 	ID    string   `json:"id,omitempty"`
 	Key   string   `json:"key,omitempty"`
 	Name  string   `json:"name,omitempty"`
+	Focus bool     `json:"focus,omitempty"`
 }
 
 type session struct {
-	conn    *ws.Conn
-	dev     store.Device
-	buttons map[input.Button]bool
-	keys    map[string]bool
+	conn      *ws.Conn
+	dev       store.Device
+	buttons   map[input.Button]bool
+	keys      map[string]bool
+	wantFocus bool // guarded by Server.mu
 }
 
 func (s *Server) send(c *ws.Conn, v any) {
@@ -712,10 +745,14 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	s.send(conn, mediaMessage(now))
 	s.cfg.Log.Printf("%s connected from %s", dev.Name, ip)
+	if s.cfg.OnSessionsChanged != nil {
+		go s.cfg.OnSessionsChanged()
+	}
 	defer func() {
 		s.release(sess)
 		s.mu.Lock()
 		delete(s.sessions, sess)
+		s.updateFocusWatchLocked()
 		if len(s.sessions) == 0 && s.mediaStop != nil {
 			s.mediaStop() // nobody is watching: stop polling the system
 			s.mediaStop = nil
@@ -723,6 +760,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 		s.mu.Unlock()
 		s.cfg.Log.Printf("%s disconnected", dev.Name)
+		if s.cfg.OnSessionsChanged != nil {
+			go s.cfg.OnSessionsChanged()
+		}
 	}()
 
 	stop := make(chan struct{})
@@ -795,6 +835,78 @@ func (s *Server) startMediaLocked() {
 	})
 }
 
+// updateFocusWatchLocked starts or stops the focus watcher depending on
+// whether a connected phone wants it. s.mu must be held.
+func (s *Server) updateFocusWatchLocked() {
+	want := false
+	for sess := range s.sessions {
+		want = want || sess.wantFocus
+	}
+	switch {
+	case want && s.focusStop == nil:
+		ctx, cancel := context.WithCancel(context.Background())
+		s.focusStop = cancel
+		s.focusKick = make(chan struct{}, 1)
+		go s.watchFocus(ctx, s.focusKick)
+	case !want && s.focusStop != nil:
+		s.focusStop()
+		s.focusStop, s.focusKick = nil, nil
+	}
+}
+
+// kickFocus asks for a check shortly after a click: the phone is told the
+// result even if it did not change (clicking again in a text field should
+// open the keyboard again).
+func (s *Server) kickFocus() {
+	s.mu.Lock()
+	k := s.focusKick
+	s.mu.Unlock()
+	if k != nil {
+		select {
+		case k <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (s *Server) watchFocus(ctx context.Context, kick chan struct{}) {
+	t := time.NewTicker(500 * time.Millisecond)
+	defer t.Stop()
+	// Start from the current state: nothing is sent until the focus changes
+	// or the phone clicks somewhere.
+	initial := s.cfg.Focus.Editable()
+	s.mu.Lock()
+	s.focusEdit = initial
+	s.mu.Unlock()
+	for {
+		force := false
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		case <-kick:
+			force = true
+			time.Sleep(200 * time.Millisecond) // let the application move its focus
+		}
+		edit := s.cfg.Focus.Editable()
+		s.mu.Lock()
+		changed := edit != s.focusEdit
+		s.focusEdit = edit
+		var conns []*ws.Conn
+		if changed || force {
+			for sess := range s.sessions {
+				if sess.wantFocus {
+					conns = append(conns, sess.conn)
+				}
+			}
+		}
+		s.mu.Unlock()
+		for _, c := range conns {
+			s.send(c, map[string]any{"t": "focus", "edit": edit})
+		}
+	}
+}
+
 func clamp(v, lim int) int {
 	if v > lim {
 		return lim
@@ -829,7 +941,9 @@ func (s *Server) dispatch(sess *session, m *message) error {
 				return err
 			}
 			sess.buttons[b] = false
-			return in.Button(b, false)
+			err := in.Button(b, false)
+			s.kickFocus()
+			return err
 		}
 		return fmt.Errorf("bad button action %q", m.A)
 	case "key": // tap a key, with optional modifiers, n times
@@ -863,6 +977,9 @@ func (s *Server) dispatch(sess *session, m *message) error {
 		for i := len(mods) - 1; i >= 0; i-- {
 			in.Key(mods[i], false)
 		}
+		if m.K == "Tab" || m.K == "Enter" || m.K == "Escape" {
+			s.kickFocus() // focus may have moved to another field
+		}
 		return err
 	case "keydown", "keyup": // hold / release (used for locked modifiers)
 		if !input.ValidKey(m.K) {
@@ -879,6 +996,12 @@ func (s *Server) dispatch(sess *session, m *message) error {
 		return in.Type(string(r))
 	case "ping":
 		s.send(sess.conn, map[string]string{"t": "pong"})
+		return nil
+	case "prefs":
+		s.mu.Lock()
+		sess.wantFocus = m.Focus && s.cfg.Focus != nil
+		s.updateFocusWatchLocked()
+		s.mu.Unlock()
 		return nil
 	case "forget": // the phone forgot this computer: drop its key here too
 		if _, err := s.Store.Revoke(sess.dev.ID); err != nil {

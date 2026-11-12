@@ -5,9 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -32,19 +30,6 @@ func guiAvailable() bool { return true }
 // alreadyRunning asks a running Tapis to show its QR code, and reports
 // whether one was running.
 func alreadyRunning() bool { return winui.SignalRunningInstance() }
-
-func openLog(dir string) io.Writer {
-	os.MkdirAll(dir, 0o700)
-	p := filepath.Join(dir, "tapis.log")
-	if fi, err := os.Stat(p); err == nil && fi.Size() > 1<<20 {
-		os.Rename(p, p+".old")
-	}
-	f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return io.Discard
-	}
-	return f
-}
 
 func guiError(err error) {
 	winui.MessageBox("Tapis", fmt.Sprintf("%s\n\n%v\n\n%s\n%s", tr("Tapis ne peut pas démarrer :", "Tapis cannot start:"),
@@ -130,12 +115,13 @@ func runGUI(srv *server.Server, logger *log.Logger, port int, dir string, pair, 
 		French:     french,
 		NewPairing: newPairing,
 		Tooltip: func() string {
-			n := len(srv.Sessions())
+			n := len(srv.Connected())
 			if n == 0 {
 				return tr("Tapis – aucun téléphone connecté", "Tapis – no phone connected")
 			}
 			return fmt.Sprintf(tr("Tapis – %d téléphone(s) connecté(s)", "Tapis – %d phone(s) connected"), n)
 		},
+		Connected:        srv.Connected,
 		AutostartEnabled: func() bool { return winui.AutostartPath() != "" },
 		SetAutostart:     winui.SetAutostart,
 		LockscreenOn:     lockscreenEnabled,

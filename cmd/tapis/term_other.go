@@ -10,3 +10,8 @@ func interactive() bool {
 }
 
 func attachConsole() {}
+
+func terminalOut() bool {
+	fi, err := os.Stdout.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0 && fi.Name() != os.DevNull
+}

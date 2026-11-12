@@ -15,6 +15,7 @@
 - **Télécommande média.** Gros boutons précédent / lecture-pause / suivant et volume dans leur propre onglet, avec le titre de ce qui se lit (vidéo YouTube, musique, film…).
 - **Contrôle de l'ordinateur.** Verrouiller ou mettre en veille (maintenir pour confirmer).
 - **Fluide.** Le mouvement du pointeur est interpolé sur l'ordinateur : il glisse même sur un écran 144 Hz. Plein écran en un toucher.
+- **Le clavier s'ouvre tout seul** quand tu cliques dans un champ de texte sur l'ordinateur (Windows). Appli en français ou en anglais, au choix.
 - **Le clavier de ton téléphone.** Compatible avec la saisie prédictive et la saisie gestuelle (Gboard, SwiftKey, Samsung), les accents et les emoji, plus une barre avec Échap, Tab, Ctrl/Alt/Win/Maj, flèches, touches F, médias et volume.
 - **Un seul petit binaire, zéro dépendance.** Écrit en Go avec uniquement la bibliothèque standard : facile à auditer.
 - **Logiciel libre** sous licence GPL-3.0.
@@ -66,6 +67,7 @@ Options : `--port` (47800 par défaut), `--layout` (Linux), `--pair`, `--config`
 
 Tapis vit dans la **zone de notification** (les icônes cachées à côté de l'horloge, `^`). Clique sur son icône pour afficher le QR code d'appairage ; clic droit pour le menu :
 
+- Les téléphones connectés en ce moment, avec leur nom.
 - **Afficher le QR code** — pour appairer un téléphone ou retrouver l'adresse.
 - **Lancer au démarrage de Windows** — coche pour que Tapis démarre tout seul à l'ouverture de session.
 - **Taper sur l'écran de verrouillage** — pour taper ton code PIN ou ton mot de passe sur l'écran de verrouillage depuis le téléphone (voir plus bas).
@@ -91,6 +93,8 @@ sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger
 ```
 
 Puis déconnecte-toi et reconnecte-toi. Installe le binaire, par exemple `install -m755 tapis ~/.local/bin/`.
+
+**Icône dans la barre système.** Sous KDE Plasma, XFCE, Cinnamon, MATE, LXQt et Budgie, Tapis affiche une icône dans la zone de notification (GNOME : installe l'extension *AppIndicator and KStatusNotifierItem Support*). Son menu liste les téléphones connectés et propose *Afficher le QR code*, *Lancer à l'ouverture de session*, l'aide et Quitter. Sans terminal, les nouveaux téléphones sont autorisés dans une boîte de dialogue (il faut `zenity` ou `kdialog` ; sans eux, l'appairage est refusé par sécurité : lance `tapis` dans un terminal pour appairer).
 Pour le lancer avec ta session, voir [`packaging/linux/tapis.service`](packaging/linux/tapis.service).
 
 **Disposition clavier.** uinput envoie des touches physiques : Tapis doit connaître ta disposition pour taper les caractères. Il la lit dans le système (`/etc/default/keyboard`, `/etc/vconsole.conf`) ou tu peux passer `--layout`. Intégrées : `us`, `fr`, `be` (AZERTY belge, accents circonflexes et trémas compris). Les caractères absents de ta disposition sont tapés avec la méthode Unicode Ctrl+Maj+U (applis GTK/Qt/IBus). Ajouter une disposition, c'est quelques lignes dans [`internal/input/layouts.go`](internal/input/layouts.go).

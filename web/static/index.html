@@ -124,6 +124,13 @@
 <dialog id="settings">
   <form method="dialog">
     <h2 data-i18n="settings">Settings</h2>
+    <label><span data-i18n="language">Language</span>
+      <select id="s-lang">
+        <option value="auto" data-i18n="langAuto">Automatic</option>
+        <option value="en">English</option>
+        <option value="fr">Français</option>
+      </select>
+    </label>
     <label><span data-i18n="speed">Pointer speed</span><input type="range" id="s-speed" min="0.4" max="4" step="0.1"></label>
     <label><span data-i18n="accel">Acceleration</span><input type="range" id="s-accel" min="0" max="2" step="0.1"></label>
     <label><span data-i18n="scroll">Scroll speed</span><input type="range" id="s-scroll" min="0.2" max="3" step="0.1"></label>
@@ -131,6 +138,7 @@
     <label class="check"><input type="checkbox" id="s-inertia"><span data-i18n="inertia">Scroll inertia</span></label>
     <label class="check"><input type="checkbox" id="s-tap"><span data-i18n="tap">Tap to click</span></label>
     <label class="check"><input type="checkbox" id="s-autofs"><span data-i18n="autofs">Full screen automatically</span></label>
+    <label class="check"><input type="checkbox" id="s-autokbd"><span data-i18n="autokbd">Open the keyboard when a text field is selected on the computer</span></label>
     <label class="check"><input type="checkbox" id="s-haptic"><span data-i18n="haptic">Vibration feedback</span></label>
     <div class="actions">
       <a href="ca.crt" download="tapis-ca.crt" class="button" data-i18n="cert">Download certificate</a>

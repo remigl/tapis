@@ -102,6 +102,17 @@ Tapis runs in the notification area: click the `^` arrow next to the clock to se
 
 That is Windows protecting the lock screen. Right-click the Tapis icon → **Type on the lock screen** and accept the administrator prompt. If it was already enabled and stopped working after an update, untick and tick it again so the helper is updated.
 
+## The phone keyboard does not open by itself
+
+- The option is in the app settings: *Open the keyboard when a text field is selected on the computer*.
+- It works on **Windows**, using the accessibility information of applications (like the Windows touch keyboard does). Most applications and all major browsers provide it; a few (some games, very old or custom-drawn apps, apps running as administrator while Tapis is not) do not: open the keyboard with the button.
+- The keyboard opens right after you click from the phone; browsers forbid a page to open it on its own at other times.
+- On Linux, this is not available yet: use the keyboard button.
+
+## No tray icon on Linux
+
+GNOME needs the *AppIndicator and KStatusNotifierItem Support* extension. Other desktops show it directly. Without a tray, Tapis keeps working in the terminal.
+
 ## The pointer moves but some windows don't react (Windows)
 
 Windows prevents normal programs from controlling programs started **as administrator** (Task Manager, installers, some games), as well as Ctrl+Alt+Del and UAC prompts. Start Tapis as administrator if you need to control those windows. For the lock screen, see above.

@@ -38,6 +38,7 @@ jobs:
           go test ./internal/qr/     -run '^$' -fuzz '^FuzzEncode$'      -fuzztime 10s
           go test ./internal/media/  -run '^$' -fuzz '^FuzzNormalize$'   -fuzztime 10s
           go test ./internal/input/  -run '^$' -fuzz '^FuzzLayouts$'     -fuzztime 10s
+          go test ./internal/dbus/   -run '^$' -fuzz '^FuzzDecode$'      -fuzztime 15s
       - name: Windows build with resources (as released)
         run: |
           cd cmd/tapis

@@ -5,6 +5,7 @@ package winui
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"os"
 	"runtime"
 	"sync"
@@ -90,6 +91,7 @@ const (
 	mfString        = 0x0
 	mfChecked       = 0x8
 	mfSeparator     = 0x800
+	mfGrayed        = 0x1
 	tpmReturnCmd    = 0x100
 	tpmRightBtn     = 0x2
 	mbYesNo         = 0x4
@@ -449,6 +451,22 @@ func (a *app) menu() {
 		pAppendMenu.Call(h, f, uintptr(id), uintptr(unsafe.Pointer(u16(text))))
 	}
 	sep := func() { pAppendMenu.Call(h, mfSeparator, 0, 0) }
+	info := func(text string) { pAppendMenu.Call(h, mfString|mfGrayed, 0, uintptr(unsafe.Pointer(u16(text)))) }
+	if o.Connected != nil {
+		names := o.Connected()
+		switch len(names) {
+		case 0:
+			info(o.T("Aucun téléphone connecté", "No phone connected"))
+		case 1:
+			info(o.T("1 téléphone connecté :", "1 phone connected:"))
+		default:
+			info(fmt.Sprintf(o.T("%d téléphones connectés :", "%d phones connected:"), len(names)))
+		}
+		for _, n := range names {
+			info("    " + n)
+		}
+		sep()
+	}
 	add(cmdShowQR, o.T("Afficher le QR code (associer un téléphone)", "Show the QR code (pair a phone)"), false)
 	sep()
 	add(cmdAutostart, o.T("Lancer au démarrage de Windows", "Start with Windows"), o.AutostartEnabled != nil && o.AutostartEnabled())

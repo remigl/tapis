@@ -27,6 +27,8 @@ type Options struct {
 	NewPairing func() Pairing
 	// Tooltip returns the text shown when hovering the icon.
 	Tooltip func() string
+	// Connected returns the names of the connected phones.
+	Connected func() []string
 	// Autostart and Lockscreen report and change the two toggles of the menu.
 	AutostartEnabled func() bool
 	SetAutostart     func(bool) error
