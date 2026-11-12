@@ -1,0 +1,5 @@
+/tapis
+/tapis.exe
+/dist/
+*.pem
+*.key

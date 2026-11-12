@@ -1,0 +1,6 @@
+# Let the logged-in desktop user create Tapis' virtual input device
+# without running Tapis as root. Install with:
+#   sudo cp 60-tapis-uinput.rules /etc/udev/rules.d/
+#   echo uinput | sudo tee /etc/modules-load.d/uinput.conf
+#   sudo modprobe uinput && sudo udevadm control --reload && sudo udevadm trigger
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"

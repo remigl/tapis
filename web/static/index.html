@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#101216">
+<meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<title>Tapis</title>
+</head>
+<body>
+<div id="app">
+  <header id="bar">
+    <span id="status" class="dot" aria-hidden="true"></span>
+    <span id="host" data-i18n="connecting">Connecting…</span>
+    <button id="btn-kbd" class="icon" aria-label="Keyboard">
+      <svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M6 13.5h.01M18 13.5h.01M8.5 14.5h7"/></svg>
+    </button>
+    <button id="btn-settings" class="icon" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+
+  <main id="pad">
+    <div id="hint">
+      <p data-i18n="hint1">One finger: move · Tap: click</p>
+      <p data-i18n="hint2">Two fingers: scroll · Two-finger tap: right click</p>
+      <p data-i18n="hint3">Tap then hold and move: drag</p>
+    </div>
+  </main>
+
+  <section id="keys" hidden>
+    <div class="row">
+      <button data-key="Escape">Esc</button>
+      <button data-key="Tab">Tab ⇥</button>
+      <button data-mod="ctrl">Ctrl</button>
+      <button data-mod="alt">Alt</button>
+      <button data-mod="meta">⊞</button>
+      <button data-mod="shift">⇧</button>
+      <button data-key="ArrowLeft" data-repeat>←</button>
+      <button data-key="ArrowUp" data-repeat>↑</button>
+      <button data-key="ArrowDown" data-repeat>↓</button>
+      <button data-key="ArrowRight" data-repeat>→</button>
+      <button data-key="Backspace" data-repeat>⌫</button>
+      <button data-key="Delete" data-repeat>Del</button>
+      <button data-key="Enter">⏎</button>
+    </div>
+    <div class="row">
+      <button data-combo="ctrl+c">Ctrl C</button>
+      <button data-combo="ctrl+v">Ctrl V</button>
+      <button data-combo="ctrl+z">Ctrl Z</button>
+      <button data-combo="ctrl+a">Ctrl A</button>
+      <button data-key="Home">Home</button>
+      <button data-key="End">End</button>
+      <button data-key="PageUp" data-repeat>PgUp</button>
+      <button data-key="PageDown" data-repeat>PgDn</button>
+      <button data-key="VolumeDown" data-repeat>🔉</button>
+      <button data-key="VolumeUp" data-repeat>🔊</button>
+      <button data-key="VolumeMute">🔇</button>
+      <button data-key="MediaPrev">⏮</button>
+      <button data-key="MediaPlayPause">⏯</button>
+      <button data-key="MediaNext">⏭</button>
+      <button data-key="F1">F1</button><button data-key="F2">F2</button><button data-key="F3">F3</button>
+      <button data-key="F4">F4</button><button data-key="F5">F5</button><button data-key="F6">F6</button>
+      <button data-key="F7">F7</button><button data-key="F8">F8</button><button data-key="F9">F9</button>
+      <button data-key="F10">F10</button><button data-key="F11">F11</button><button data-key="F12">F12</button>
+      <button data-key="PrintScreen">PrtSc</button>
+      <button data-key="Insert">Ins</button>
+      <button data-key="ContextMenu">Menu</button>
+    </div>
+  </section>
+
+  <footer id="buttons">
+    <button data-btn="left" aria-label="Left click"></button>
+    <button data-btn="middle" class="mid" aria-label="Middle click"></button>
+    <button data-btn="right" aria-label="Right click"></button>
+  </footer>
+</div>
+
+<input id="kbd" type="text" autocomplete="off" autocorrect="off" autocapitalize="none"
+       spellcheck="false" enterkeyhint="enter" inputmode="text" aria-label="Keyboard input"
+       data-lpignore="true" data-1p-ignore>
+
+<dialog id="settings">
+  <form method="dialog">
+    <h2 data-i18n="settings">Settings</h2>
+    <label><span data-i18n="speed">Pointer speed</span><input type="range" id="s-speed" min="0.4" max="4" step="0.1"></label>
+    <label><span data-i18n="accel">Acceleration</span><input type="range" id="s-accel" min="0" max="2" step="0.1"></label>
+    <label><span data-i18n="scroll">Scroll speed</span><input type="range" id="s-scroll" min="0.2" max="3" step="0.1"></label>
+    <label class="check"><input type="checkbox" id="s-natural"><span data-i18n="natural">Natural scrolling</span></label>
+    <label class="check"><input type="checkbox" id="s-inertia"><span data-i18n="inertia">Scroll inertia</span></label>
+    <label class="check"><input type="checkbox" id="s-tap"><span data-i18n="tap">Tap to click</span></label>
+    <label class="check"><input type="checkbox" id="s-haptic"><span data-i18n="haptic">Vibration feedback</span></label>
+    <div class="actions">
+      <button type="button" id="btn-fullscreen" data-i18n="fullscreen">Full screen</button>
+      <a href="ca.crt" download="tapis-ca.crt" class="button" data-i18n="cert">Download certificate</a>
+      <button type="button" id="btn-forget" class="danger" data-i18n="forget">Forget this computer</button>
+      <button value="close" class="primary" data-i18n="done">Done</button>
+    </div>
+    <p class="small"><a href="https://github.com/remigl/tapis" rel="noreferrer" data-i18n="about">Tapis · free software (GPL-3.0)</a></p>
+  </form>
+</dialog>
+
+<div id="overlay" hidden>
+  <div class="card">
+    <h2 id="ov-title"></h2>
+    <p id="ov-text"></p>
+    <button id="ov-retry" class="primary" data-i18n="retry">Retry</button>
+  </div>
+</div>
+
+<script src="app.js" type="module"></script>
+</body>
+</html>
