@@ -165,7 +165,18 @@ body.kbd-open #tabs { display: none; }
 }
 #view-media[hidden] { display: none; }
 button.tile { display: grid; place-items: center; padding: 0; border-radius: var(--radius); background: var(--surface); min-height: 0; }
-button.tile.play, button.tile.mute { grid-column: 1 / -1; }
+button.tile.mute, .play-wrap { grid-column: 1 / -1; }
+.play-wrap { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.play-wrap button.tile.play { flex: 1; }
+#now { padding: 12px 14px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); text-align: center; }
+#now[hidden] { display: none; }
+#now-title { font-weight: 700; font-size: 17px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+#now-sub { color: var(--muted); font-size: 13px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#now-sub:empty { display: none; }
+button.tile.play .ic-play, button.tile.play .ic-pause { display: none; }
+button.tile.play[data-state="playing"] .ic-both, button.tile.play[data-state="paused"] .ic-both { display: none; }
+button.tile.play[data-state="playing"] .ic-pause { display: inline; }
+button.tile.play[data-state="paused"] .ic-play { display: inline; }
 button.tile.play { background: var(--accent); color: #0b1020; border-color: transparent; }
 button.tile svg { width: auto; height: min(42%, 72px); aspect-ratio: 1; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 button.tile:active { filter: brightness(1.4); }

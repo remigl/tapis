@@ -83,6 +83,15 @@ The phone was unpaired with `tapis revoke` or `r <id>`, or the configuration fol
 
 Tapis was closed, the computer went to sleep, or one of the devices changed network. Restart Tapis, wake the computer, check the Wi-Fi, then tap **Retry**.
 
+## The media title is not shown
+
+Tapis shows what the system itself knows is playing (the same as the Windows volume overlay or the Linux media widget). If nothing appears:
+
+- **Browsers** (YouTube, Netflix, etc. in Chrome, Edge, Firefox) work. In Firefox, `media.hardwaremediakeys.enabled` must stay on (default).
+- **VLC 3 on Windows** does not publish what it plays to Windows. VLC 4, the Films & TV / Media Player apps, Spotify and browsers do. On Linux VLC works.
+- **Slideshows** (PowerPoint, photo viewers) are not media players for the system, so nothing is shown. That is expected.
+- On Linux, the title is read through `busctl` (part of systemd).
+
 ## The pointer moves but some windows don't react (Windows)
 
 Windows prevents normal programs from controlling programs started **as administrator** (Task Manager, installers, some games), as well as the lock screen, Ctrl+Alt+Del and UAC prompts. Start Tapis as administrator if you need to control those windows.

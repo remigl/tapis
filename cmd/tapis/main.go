@@ -20,6 +20,7 @@ import (
 
 	"github.com/remigl/tapis/internal/firewall"
 	"github.com/remigl/tapis/internal/input"
+	"github.com/remigl/tapis/internal/media"
 	"github.com/remigl/tapis/internal/qr"
 	"github.com/remigl/tapis/internal/server"
 	"github.com/remigl/tapis/internal/store"
@@ -101,6 +102,9 @@ func main() {
 		AllowAnyNetwork: *anyNet, Smooth: !*noSmooth, OnPairingUsed: func() { removeQR(*dir) }}
 	if *dry {
 		cfg.SystemAction = func(a system.Action) error { fmt.Println("[system]", a); return nil }
+		cfg.MediaWatch = func(ctx context.Context, fn func(media.Info)) {
+			fn(media.Info{Title: "Big Buck Bunny (demo)", Artist: "Blender Foundation", App: "Chrome", Playing: true})
+		}
 	}
 	// New phones must be approved here, in the Tapis window, when someone
 	// is there to answer (an interactive console).

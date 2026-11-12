@@ -83,6 +83,15 @@ Le téléphone a été retiré avec `tapis revoke` ou `r <id>`, ou le dossier de
 
 Tapis a été fermé, l'ordinateur s'est mis en veille, ou un des appareils a changé de réseau. Relance Tapis, réveille l'ordinateur, vérifie le Wi-Fi, puis touche **Réessayer**.
 
+## Le titre du média ne s'affiche pas
+
+Tapis affiche ce que le système lui-même sait être en lecture (comme l'encart du volume de Windows ou le widget média de Linux). Si rien n'apparaît :
+
+- **Les navigateurs** (YouTube, Netflix, etc. dans Chrome, Edge, Firefox) fonctionnent. Dans Firefox, `media.hardwaremediakeys.enabled` doit rester activé (par défaut).
+- **VLC 3 sous Windows** ne signale pas ce qu'il lit à Windows. VLC 4, les applis Films et TV / Lecteur multimédia, Spotify et les navigateurs le font. Sous Linux, VLC fonctionne.
+- **Les diaporamas** (PowerPoint, visionneuses de photos) ne sont pas des lecteurs média pour le système : rien ne s'affiche, c'est normal.
+- Sous Linux, le titre est lu via `busctl` (fourni avec systemd).
+
 ## Le pointeur bouge mais certaines fenêtres ne réagissent pas (Windows)
 
 Windows empêche les programmes normaux de contrôler ceux lancés **en administrateur** (Gestionnaire des tâches, installateurs, certains jeux), ainsi que l'écran de verrouillage, Ctrl+Alt+Suppr et les demandes UAC. Lance Tapis en administrateur si tu dois contrôler ces fenêtres.

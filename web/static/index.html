@@ -87,7 +87,13 @@
   </div>
 
   <section id="view-media" class="view" hidden>
-    <button class="tile play" data-key="MediaPlayPause" aria-label="Play / pause"><svg viewBox="0 0 24 24"><path d="M5 5l9 7-9 7zM16 5v14M20 5v14"/></svg></button>
+    <div class="play-wrap">
+      <div id="now" hidden>
+        <div id="now-title"></div>
+        <div id="now-sub"></div>
+      </div>
+      <button class="tile play" data-key="MediaPlayPause" aria-label="Play / pause"><svg viewBox="0 0 24 24"><path class="ic-both" d="M5 5l9 7-9 7zM16 5v14M20 5v14"/><path class="ic-play" d="M7 4.5l12 7.5-12 7.5z"/><path class="ic-pause" d="M8 5v14M16 5v14"/></svg></button>
+    </div>
     <button class="tile" data-key="MediaPrev" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M6 5v14M19 5 9 12l10 7z"/></svg></button>
     <button class="tile" data-key="MediaNext" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l10 7-10 7z"/></svg></button>
     <button class="tile" data-key="VolumeDown" data-repeat aria-label="Volume down"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM16 12h5"/></svg></button>

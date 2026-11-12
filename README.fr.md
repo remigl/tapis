@@ -10,7 +10,7 @@
 - **Pas d'Internet, pas de cloud, pas de compte.** Le téléphone et l'ordinateur se parlent directement sur ton réseau. La page ne charge rien de l'extérieur et le serveur refuse tout client qui n'est pas sur un réseau privé.
 - **Chiffré et appairé.** TLS 1.3 avec un certificat généré sur ton ordinateur, appairage par QR code à usage unique confirmé sur l'ordinateur, une clé par téléphone, révocable. [Audité](SECURITY.md).
 - **Un vrai trackpad.** Accélération du pointeur, toucher pour cliquer, défilement à deux doigts avec inertie, clic droit à deux doigts, glisser-déposer, clic milieu à trois doigts.
-- **Télécommande média.** Gros boutons précédent / lecture-pause / suivant et volume dans leur propre onglet.
+- **Télécommande média.** Gros boutons précédent / lecture-pause / suivant et volume dans leur propre onglet, avec le titre de ce qui se lit (vidéo YouTube, musique, film…).
 - **Contrôle de l'ordinateur.** Verrouiller ou mettre en veille (maintenir pour confirmer).
 - **Fluide.** Le mouvement du pointeur est interpolé sur l'ordinateur : il glisse même sur un écran 144 Hz. Plein écran en un toucher.
 - **Le clavier de ton téléphone.** Compatible avec la saisie prédictive et la saisie gestuelle (Gboard, SwiftKey, Samsung), les accents et les emoji, plus une barre avec Échap, Tab, Ctrl/Alt/Win/Maj, flèches, touches F, médias et volume.

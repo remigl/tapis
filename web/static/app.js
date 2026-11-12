@@ -149,6 +149,9 @@ function connect() {
       case 'paired':
         save('tapis.device', { id: msg.id, key: msg.key });
         break;
+      case 'media':
+        showNowPlaying(msg);
+        break;
       case 'sys':
         toast(t(msg.a === 'lock' ? 'lockDone' : 'sleepDone'));
         break;
@@ -170,6 +173,7 @@ function connect() {
   };
   ws.onclose = () => {
     connected = false;
+    showNowPlaying(null);
     ws = null;
     if (fatal) return;
     setStatus('bad', t('connecting'));
@@ -206,6 +210,17 @@ async function requestWakeLock() {
       wakeLock.addEventListener('release', () => { wakeLock = null; });
     }
   } catch { /* not available without a trusted certificate */ }
+}
+
+// ---------- now playing ----------
+function showNowPlaying(m) {
+  const has = !!(m && m.title);
+  $('#now').hidden = !has;
+  $('#now-title').textContent = has ? m.title : '';
+  $('#now-sub').textContent = has ? [m.artist, m.app].filter(Boolean).join(' · ') : '';
+  const play = $('#view-media .tile.play');
+  if (has) play.dataset.state = m.playing ? 'playing' : 'paused';
+  else delete play.dataset.state;
 }
 
 // ---------- modifiers (one-shot on tap, locked on double tap) ----------

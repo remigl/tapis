@@ -10,7 +10,7 @@
 - **No Internet, no cloud, no account.** Phone and computer talk directly on your network. The page loads nothing from outside, and the server refuses any client that is not on a private network.
 - **Encrypted and paired.** TLS 1.3 with a certificate generated on your computer, one-time QR pairing approved on the computer, per-phone keys you can revoke. [Audited](SECURITY.md).
 - **A real trackpad.** Pointer acceleration, tap to click, two-finger scroll with inertia, two-finger tap for right click, tap-and-drag, three-finger tap for middle click.
-- **Media remote.** Big previous / play-pause / next and volume buttons in their own tab.
+- **Media remote.** Big previous / play-pause / next and volume buttons in their own tab, with the title of what is playing (YouTube video, song, film…).
 - **Computer controls.** Lock the computer or put it to sleep (hold to confirm).
 - **Smooth.** Pointer motion is interpolated on the computer, so it glides even on 144 Hz screens. Full screen in one tap.
 - **Your phone's own keyboard.** Works with predictive and swipe typing (Gboard, SwiftKey, Samsung), accents and emoji, plus a bar with Esc, Tab, Ctrl/Alt/Win/Shift, arrows, F-keys, media and volume keys.

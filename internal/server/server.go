@@ -26,6 +26,7 @@ import (
 
 	"github.com/remigl/tapis/internal/certs"
 	"github.com/remigl/tapis/internal/input"
+	"github.com/remigl/tapis/internal/media"
 	"github.com/remigl/tapis/internal/store"
 	"github.com/remigl/tapis/internal/system"
 	"github.com/remigl/tapis/internal/ws"
@@ -49,6 +50,8 @@ type Config struct {
 	OnPairingUsed func()
 	// SystemAction performs lock/sleep (defaults to system.Do).
 	SystemAction func(system.Action) error
+	// MediaWatch reports what is playing (defaults to media.Watch).
+	MediaWatch func(context.Context, func(media.Info))
 }
 
 // Server serves the phone web app and the control WebSocket.
@@ -61,6 +64,8 @@ type Server struct {
 
 	mu          sync.Mutex
 	mover       *mover
+	nowPlaying  media.Info
+	mediaStop   context.CancelFunc
 	pairToken   string
 	pairExpires time.Time
 	fails       map[string]*failInfo
@@ -583,12 +588,20 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	sess := &session{conn: conn, dev: dev, buttons: map[input.Button]bool{}, keys: map[string]bool{}}
 	s.mu.Lock()
 	s.sessions[sess] = struct{}{}
+	s.startMediaLocked()
+	now := s.nowPlaying
 	s.mu.Unlock()
+	s.send(conn, mediaMessage(now))
 	s.cfg.Log.Printf("%s connected from %s", dev.Name, ip)
 	defer func() {
 		s.release(sess)
 		s.mu.Lock()
 		delete(s.sessions, sess)
+		if len(s.sessions) == 0 && s.mediaStop != nil {
+			s.mediaStop() // nobody is watching: stop polling the system
+			s.mediaStop = nil
+			s.nowPlaying = media.Info{}
+		}
 		s.mu.Unlock()
 		s.cfg.Log.Printf("%s disconnected", dev.Name)
 	}()
@@ -627,6 +640,40 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			s.cfg.Log.Printf("input error: %v", err)
 		}
 	}
+}
+
+func mediaMessage(i media.Info) map[string]any {
+	return map[string]any{"t": "media", "title": i.Title, "artist": i.Artist, "app": i.App, "playing": i.Playing}
+}
+
+// startMediaLocked starts watching what is playing, once. s.mu must be held.
+func (s *Server) startMediaLocked() {
+	if s.mediaStop != nil {
+		return
+	}
+	watch := s.cfg.MediaWatch
+	if watch == nil {
+		watch = media.Watch
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.mediaStop = cancel
+	go watch(ctx, func(i media.Info) {
+		s.mu.Lock()
+		if ctx.Err() != nil {
+			s.mu.Unlock()
+			return
+		}
+		s.nowPlaying = i
+		conns := make([]*ws.Conn, 0, len(s.sessions))
+		for sess := range s.sessions {
+			conns = append(conns, sess.conn)
+		}
+		s.mu.Unlock()
+		msg := mediaMessage(i)
+		for _, c := range conns {
+			s.send(c, msg)
+		}
+	})
 }
 
 func clamp(v, lim int) int {
