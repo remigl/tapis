@@ -383,23 +383,6 @@ function startInertia() {
   inertiaFrame = requestAnimationFrame(step);
 }
 
-// ---------- physical-looking mouse buttons ----------
-for (const b of $$('[data-btn]')) {
-  b.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    b.setPointerCapture(e.pointerId);
-    b.classList.add('down');
-    send({ t: 'btn', b: b.dataset.btn, a: 'down' });
-    haptic();
-  });
-  const up = () => {
-    if (!b.classList.contains('down')) return;
-    b.classList.remove('down');
-    send({ t: 'btn', b: b.dataset.btn, a: 'up' });
-  };
-  b.addEventListener('pointerup', up);
-  b.addEventListener('pointercancel', up);
-}
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // ---------- special keys bar ----------

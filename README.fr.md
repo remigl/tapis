@@ -40,7 +40,6 @@ Un souci ? Voir le **[guide de dépannage](DEPANNAGE.md)**.
 | Deux doigts | Défiler (vertical et horizontal) |
 | Toucher à deux doigts | Clic droit |
 | Toucher à trois doigts | Clic milieu |
-| Boutons du bas | Boutons gauche / milieu / droit, maintenables |
 
 ### Clavier
 

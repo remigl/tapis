@@ -69,7 +69,7 @@ button.icon.on { background: var(--accent); color: #0b1020; }
 /* Trackpad */
 #pad {
   flex: 1;
-  margin: 0 10px;
+  margin: 0 10px 10px;
   border-radius: var(--radius);
   background:
     radial-gradient(circle at 1px 1px, #ffffff0d 1px, transparent 0) 0 0 / 22px 22px,
@@ -95,13 +95,6 @@ button.icon.on { background: var(--accent); color: #0b1020; }
 #keys button { flex: none; min-width: 46px; padding: 9px 10px; font-size: 14px; }
 #keys button.armed { background: #2b4a7e; border-color: var(--accent); }
 #keys button.locked { background: var(--accent); color: #0b1020; font-weight: 700; }
-
-/* Mouse buttons */
-#buttons { display: flex; gap: 8px; margin: 0 10px 10px; height: 64px; flex: none; }
-#buttons button { flex: 1; border-radius: var(--radius); background: var(--surface); }
-#buttons button.mid { flex: 0 0 44px; }
-#buttons button.down { background: var(--surface-2); border-color: var(--accent); }
-body.kbd-open #buttons { height: 48px; }
 
 /* Hidden text field that brings up the phone keyboard */
 #kbd {
@@ -162,13 +155,20 @@ dialog input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--acc
 .view[hidden] { display: none; }
 body.kbd-open #tabs { display: none; }
 
-/* Media */
-#view-media { justify-content: center; gap: 18px; padding: 10px; }
-.media-row { display: flex; justify-content: center; align-items: center; gap: 18px; }
-button.big { width: min(26vw, 120px); aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; padding: 0; background: var(--surface); }
-button.big.play { width: min(32vw, 150px); background: var(--accent); color: #0b1020; border-color: transparent; }
-button.big svg { width: 42%; height: 42%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-button.big.flash { filter: brightness(1.5); }
+/* Media: the whole screen is a grid of large rectangular buttons */
+#view-media {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 2fr 1.4fr 1.4fr 1fr;
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+#view-media[hidden] { display: none; }
+button.tile { display: grid; place-items: center; padding: 0; border-radius: var(--radius); background: var(--surface); min-height: 0; }
+button.tile.play, button.tile.mute { grid-column: 1 / -1; }
+button.tile.play { background: var(--accent); color: #0b1020; border-color: transparent; }
+button.tile svg { width: auto; height: min(42%, 72px); aspect-ratio: 1; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+button.tile:active { filter: brightness(1.4); }
 
 /* Computer actions: hold to confirm */
 #view-system { justify-content: center; padding: 10px; gap: 14px; }

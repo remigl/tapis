@@ -40,7 +40,6 @@ Something doesn't work? See **[Troubleshooting](TROUBLESHOOTING.md)**.
 | Two fingers | Scroll (vertical and horizontal) |
 | Two-finger tap | Right click |
 | Three-finger tap | Middle click |
-| Bottom buttons | Left / middle / right buttons, can be held |
 
 ### Keyboard
 
