@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/remigl/tapis/internal/qr"
 	"github.com/remigl/tapis/internal/server"
 	"github.com/remigl/tapis/internal/store"
+	"github.com/remigl/tapis/internal/system"
 	"github.com/remigl/tapis/web"
 )
 
@@ -57,6 +59,8 @@ func main() {
 	layout := flag.String("layout", "auto", "keyboard layout of this computer, Linux only ("+strings.Join(input.LayoutNames(), ", ")+")")
 	pair := flag.Bool("pair", false, "show a pairing QR code at startup even if phones are already paired")
 	dry := flag.Bool("dry-run", false, "print input events instead of injecting them")
+	noConfirm := flag.Bool("no-confirm", false, "pair new phones without asking for confirmation on this computer")
+	noSmooth := flag.Bool("no-smooth", false, "disable pointer motion smoothing")
 	noFW := flag.Bool("no-firewall", false, "do not configure Windows Firewall automatically")
 	anyNet := flag.Bool("allow-any-network", false, "accept clients from non-private addresses (NOT recommended)")
 	flag.Usage = usage
@@ -93,7 +97,17 @@ func main() {
 	}
 	defer inj.Close()
 
-	srv, err := server.New(server.Config{Port: *port, Dir: *dir, Injector: inj, Web: web.FS(), Log: logger, AllowAnyNetwork: *anyNet})
+	cfg := server.Config{Port: *port, Dir: *dir, Injector: inj, Web: web.FS(), Log: logger,
+		AllowAnyNetwork: *anyNet, Smooth: !*noSmooth, OnPairingUsed: func() { removeQR(*dir) }}
+	if *dry {
+		cfg.SystemAction = func(a system.Action) error { fmt.Println("[system]", a); return nil }
+	}
+	// New phones must be approved here, in the Tapis window, when someone
+	// is there to answer (an interactive console).
+	if !*noConfirm && interactive() {
+		cfg.ConfirmPairing = approvals.ask
+	}
+	srv, err := server.New(cfg)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		pauseIfDoubleClicked()
@@ -139,6 +153,7 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	defer removeQR(*dir)
 	go console(ctx, cancel, srv, *dir)
 
 	if err := srv.Run(ctx); err != nil {
@@ -169,6 +184,8 @@ func showPairing(srv *server.Server, dir string) {
 		png.Encode(f, code.Image(8))
 		f.Close()
 		fmt.Println("  QR image:", pngPath)
+		// The image holds a secret: delete it once the code has expired.
+		time.AfterFunc(5*time.Minute+time.Second, func() { removeQR(dir) })
 	}
 	fmt.Println("  This code works once and expires in 5 minutes.")
 	fmt.Println("  The phone must be on the same Wi-Fi. Open the link in Chrome (or Safari on iPhone).")
@@ -180,6 +197,9 @@ func showPairing(srv *server.Server, dir string) {
 func console(ctx context.Context, cancel func(), srv *server.Server, dir string) {
 	sc := bufio.NewScanner(os.Stdin)
 	for sc.Scan() {
+		if approvals.answer(sc.Text()) {
+			continue
+		}
 		f := strings.Fields(sc.Text())
 		if len(f) == 0 {
 			continue
@@ -265,4 +285,59 @@ func revoke(dir, id string) {
 	default:
 		fmt.Println("Phone", id, "unpaired.")
 	}
+}
+
+func removeQR(dir string) { os.Remove(filepath.Join(dir, "pairing-qr.png")) }
+
+// approvals lets the console answer pairing requests.
+var approvals approver
+
+type approver struct {
+	mu      sync.Mutex
+	pending chan bool
+}
+
+func (a *approver) ask(name, ip string) bool {
+	ch := make(chan bool, 1)
+	a.mu.Lock()
+	if a.pending != nil { // one request at a time
+		a.mu.Unlock()
+		return false
+	}
+	a.pending = ch
+	a.mu.Unlock()
+	defer func() { a.mu.Lock(); a.pending = nil; a.mu.Unlock() }()
+	fmt.Printf("\n>>> New phone %q (%s) wants to pair. Allow it? Type y (yes) or n (no), then Enter: ", name, ip)
+	select {
+	case ok := <-ch:
+		return ok
+	case <-time.After(60 * time.Second):
+		fmt.Println("\n>>> No answer: pairing refused.")
+		return false
+	}
+}
+
+// answer consumes a console line if a pairing request is waiting.
+func (a *approver) answer(line string) bool {
+	a.mu.Lock()
+	ch := a.pending
+	a.mu.Unlock()
+	if ch == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes", "o", "oui":
+		ch <- true
+		fmt.Println(">>> Phone allowed.")
+	case "n", "no", "non":
+		ch <- false
+		fmt.Println(">>> Phone refused.")
+	default:
+		fmt.Print(">>> Type y (yes) or n (no), then Enter: ")
+		return true
+	}
+	a.mu.Lock()
+	a.pending = nil
+	a.mu.Unlock()
+	return true
 }

@@ -5,43 +5,95 @@ on:
     tags: ["v*"]
   pull_request:
 
+# Least privilege by default; jobs ask for more only when they need it.
 permissions:
   contents: read
+
+# Third-party actions are pinned to full commit SHAs (supply-chain safety).
+# Dependabot keeps them up to date (.github/dependabot.yml).
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          go-version: stable
-      - run: test -z "$(gofmt -l .)"
-      - run: go vet ./...
-      - run: GOOS=windows go vet ./...
-      - run: go test ./...
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Format
+        run: test -z "$(gofmt -l .)"
+      - name: Vet (Linux and Windows)
+        run: go vet ./... && GOOS=windows go vet ./...
+      - name: Tests (with race detector)
+        run: go test -race ./...
+      - name: Known vulnerabilities (govulncheck)
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: test
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write     # publish the release
+      id-token: write     # Sigstore keyless signing of the build provenance
+      attestations: write # store the signed attestations on GitHub
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          go-version: stable
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
       - name: Build
         run: |
           mkdir dist
           for target in windows/amd64 windows/arm64 linux/amd64 linux/arm64; do
             os=${target%/*}; arch=${target#*/}; ext=""; [ "$os" = windows ] && ext=".exe"
-            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath \
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -buildvcs=true \
               -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
               -o "dist/tapis-${GITHUB_REF_NAME}-${os}-${arch}${ext}" ./cmd/tapis
           done
-          cd dist && sha256sum * > SHA256SUMS
+
+      # ---- Windows Authenticode signing (SignPath Foundation, free for OSS) ----
+      # Enabled once the project is accepted: set the repository variables
+      # SIGNPATH_ORGANIZATION_ID and SIGNPATH_PROJECT_SLUG and the secret
+      # SIGNPATH_API_TOKEN. See CODE_SIGNING.md.
+      - name: Upload Windows binaries for signing
+        id: unsigned
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-unsigned
+          path: dist/*.exe
+      - name: Sign Windows binaries (SignPath)
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: release-signing
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+      - name: Use signed Windows binaries
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        run: cp signed/*.exe dist/
+
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS
+
+      # Signed, publicly verifiable proof that each file was built by this
+      # workflow from this exact commit (Sigstore, SLSA build provenance):
+      #   gh attestation verify <file> --repo remigl/tapis
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}

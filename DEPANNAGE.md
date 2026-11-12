@@ -7,7 +7,7 @@ Commence par la liste de vérification : elle règle la plupart des problèmes e
 ## Vérification rapide
 
 1. Tapis tourne sur l'ordinateur et sa fenêtre affiche `Firewall: OK` (Windows).
-2. Le téléphone est sur le **même réseau Wi-Fi** que l'ordinateur (pas en données mobiles, pas sur un réseau « invité »).
+2. Le téléphone est sur le **même réseau Wi-Fi** que l'ordinateur (pas en données mobiles, pas sur un réseau « invité ») et son **VPN est coupé** ou autorise le réseau local.
 3. Tu ouvres l'adresse affichée par Tapis (`https://192.168.x.x:47800`) **dans Chrome** (Android) ou **Safari** (iPhone).
 4. Sur l'avertissement de certificat, tu as touché **Paramètres avancés → Continuer**.
 
@@ -37,6 +37,25 @@ Supprime aussi toute règle au nom du programme Tapis qui le **bloque** dans *Pa
 **Un VPN est actif** sur l'ordinateur ou le téléphone. Certains VPN bloquent le réseau local : désactive-le, ou active « autoriser l'accès au réseau local » dans ses réglages.
 
 **Pare-feu Linux.** Avec ufw : `sudo ufw allow from 192.168.0.0/16 to any port 47800 proto tcp` (adapte à ton réseau). Avec firewalld : `sudo firewall-cmd --zone=home --add-port=47800/tcp --permanent && sudo firewall-cmd --reload`, et vérifie que ton Wi-Fi est dans la zone `home`.
+
+## Ça marche en Wi-Fi mais pas quand le VPN du téléphone est actif
+
+Un VPN envoie tout le trafic du téléphone dans un tunnel chiffré vers un serveur distant, y compris celui destiné à ton propre réseau : le téléphone ne peut donc plus joindre l'ordinateur. Aucun site web ne peut contourner le VPN du téléphone, mais toutes les bonnes applis VPN ont une option pour ça :
+
+- **Proton VPN :** Paramètres → *Connexions LAN* (autoriser les connexions LAN).
+- **NordVPN :** *Split tunneling* → exclure Chrome.
+- **Surfshark, Mullvad, ExpressVPN, WireGuard et autres :** cherche *Partage du réseau local*, *Autoriser le LAN*, *Contourner le LAN* ou *Split tunneling* (exclure Chrome).
+- Le **DNS privé** d'Android ne pose pas ce problème, seuls les VPN le font.
+
+Après avoir changé le réglage, recharge la page Tapis.
+
+## « Confirme sur l'ordinateur » s'affiche et rien ne se passe
+
+Depuis la 0.2.0, chaque nouveau téléphone doit être autorisé sur l'ordinateur : dans la fenêtre Tapis, tape `y` puis Entrée (ou `n` pour refuser). Sans réponse en une minute, l'appairage est refusé. Si Tapis tourne sans fenêtre (service Linux), lance `tapis --pair` dans un terminal pour appairer.
+
+## Verrouiller ou mettre en veille ne fait rien (Linux)
+
+Le verrouillage utilise `loginctl lock-session` (ou `xdg-screensaver lock`) et la veille `systemctl suspend`. Vérifie qu'ils fonctionnent tapés dans un terminal ; certains bureaux ont besoin d'un verrouilleur d'écran installé.
 
 ## La page reste blanche juste après le scan, mais marche quand je tape l'adresse dans Chrome
 

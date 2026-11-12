@@ -27,6 +27,7 @@ import (
 	"github.com/remigl/tapis/internal/certs"
 	"github.com/remigl/tapis/internal/input"
 	"github.com/remigl/tapis/internal/store"
+	"github.com/remigl/tapis/internal/system"
 	"github.com/remigl/tapis/internal/ws"
 )
 
@@ -39,6 +40,15 @@ type Config struct {
 	Log      *log.Logger
 	// AllowAnyNetwork disables the private-address check (not recommended).
 	AllowAnyNetwork bool
+	// Smooth enables pointer motion smoothing.
+	Smooth bool
+	// ConfirmPairing, if set, is asked to approve each new phone (on the
+	// computer's side) before it is paired. It may block for a while.
+	ConfirmPairing func(name, ip string) bool
+	// OnPairingUsed is called when the current pairing code is consumed.
+	OnPairingUsed func()
+	// SystemAction performs lock/sleep (defaults to system.Do).
+	SystemAction func(system.Action) error
 }
 
 // Server serves the phone web app and the control WebSocket.
@@ -50,9 +60,13 @@ type Server struct {
 	hostname string
 
 	mu          sync.Mutex
+	mover       *mover
 	pairToken   string
 	pairExpires time.Time
 	fails       map[string]*failInfo
+	pairFails   int
+	conns       int
+	connsByIP   map[string]int
 	notes       map[string]time.Time
 	sessions    map[*session]struct{}
 }
@@ -66,6 +80,12 @@ const (
 	pairingTTL  = 5 * time.Minute
 	maxFailures = 5
 	lockout     = time.Minute
+
+	maxPairFailures = 20   // wrong codes before the current code is cancelled
+	maxConns        = 16   // simultaneous WebSocket connections
+	maxConnsPerIP   = 4    // simultaneous WebSocket connections from one address
+	maxTracked      = 1024 // bound on per-address bookkeeping
+	confirmTimeout  = 60 * time.Second
 )
 
 // New prepares the server: loads the device store and TLS identity.
@@ -80,8 +100,8 @@ func New(cfg Config) (*Server, error) {
 		return nil, err
 	}
 	host, _ := os.Hostname()
-	return &Server{cfg: cfg, Store: st, Identity: id, IPs: ips, hostname: host,
-		fails: map[string]*failInfo{}, sessions: map[*session]struct{}{}}, nil
+	return &Server{cfg: cfg, Store: st, Identity: id, IPs: ips, hostname: host, mover: newMover(cfg.Injector, cfg.Smooth),
+		fails: map[string]*failInfo{}, sessions: map[*session]struct{}{}, connsByIP: map[string]int{}}, nil
 }
 
 // NewPairing creates a fresh single-use pairing token and returns the URLs
@@ -91,6 +111,7 @@ func (s *Server) NewPairing() []string {
 	defer s.mu.Unlock()
 	s.pairToken = store.RandomToken(16)
 	s.pairExpires = time.Now().Add(pairingTTL)
+	s.pairFails = 0
 	var urls []string
 	for _, ip := range s.IPs {
 		urls = append(urls, s.baseURL(ip)+"/#pair="+s.pairToken)
@@ -135,6 +156,7 @@ func (s *Server) Run(ctx context.Context) error {
 		// HTTP/1.1 only: WebSockets over HTTP/2 (RFC 8441) are not needed.
 		TLSNextProto:      map[string]func(*http.Server, *tls.Conn, http.Handler){},
 		ReadHeaderTimeout: 10 * time.Second,
+		MaxHeaderBytes:    16 << 10,
 		IdleTimeout:       2 * time.Minute,
 		ErrorLog:          log.New(&handshakeLog{s: s}, "", 0),
 	}
@@ -145,6 +167,7 @@ func (s *Server) Run(ctx context.Context) error {
 			http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusFound)
 		})),
 		ReadHeaderTimeout: 10 * time.Second,
+		MaxHeaderBytes:    16 << 10,
 		ErrorLog:          log.New(io.Discard, "", 0),
 	}
 
@@ -210,7 +233,7 @@ func (s *Server) Run(ctx context.Context) error {
 // what reaches Tapis without flooding the console.
 func (s *Server) noteOnce(key, msg string) {
 	s.mu.Lock()
-	if s.notes == nil {
+	if s.notes == nil || len(s.notes) >= maxTracked {
 		s.notes = map[string]time.Time{}
 	}
 	last, seen := s.notes[key]
@@ -298,12 +321,35 @@ func IsLocal(ip net.IP) bool {
 	return ip != nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast())
 }
 
+// validHost accepts IP literals of local networks, localhost and our
+// mDNS-style name. Domain names that could be re-pointed by an attacker
+// (DNS rebinding) are refused.
+func (s *Server) validHost(hostport string) bool {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if ip := net.ParseIP(host); ip != nil {
+		return s.cfg.AllowAnyNetwork || IsLocal(ip)
+	}
+	host = strings.ToLower(host)
+	return host == "localhost" || host == s.Identity.LeafCert.Subject.CommonName
+}
+
 // guard rejects non-local clients and adds security headers.
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !s.cfg.AllowAnyNetwork && !IsLocal(remoteIP(r)) {
 			s.cfg.Log.Printf("rejected connection from non-local address %s", r.RemoteAddr)
 			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if !s.validHost(r.Host) {
+			// Blocks DNS-rebinding attacks: only IP addresses and our own
+			// names are accepted, never an arbitrary domain.
+			s.noteOnce("host"+r.Host, "rejected request for unexpected host "+strconv.Quote(r.Host))
+			http.Error(w, "unexpected host", http.StatusMisdirectedRequest)
 			return
 		}
 		if r.URL.Path == "/" {
@@ -313,11 +359,13 @@ func (s *Server) guard(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; "+
 			"img-src 'self' data:; manifest-src 'self'; connect-src 'self' wss://"+r.Host+"; "+
-			"base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+			"base-uri 'none'; form-action 'none'; frame-ancestors 'none'; require-trusted-types-for 'script'")
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
+		h.Set("Cross-Origin-Resource-Policy", "same-origin")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=(), interest-cohort=()")
 		h.Set("Cache-Control", "no-cache")
 		next.ServeHTTP(w, r)
 	})
@@ -335,6 +383,13 @@ func (s *Server) fail(ip string) {
 	defer s.mu.Unlock()
 	f := s.fails[ip]
 	if f == nil {
+		if len(s.fails) >= maxTracked { // drop stale entries
+			for k, v := range s.fails {
+				if time.Now().After(v.until) {
+					delete(s.fails, k)
+				}
+			}
+		}
 		f = &failInfo{}
 		s.fails[ip] = f
 	}
@@ -359,9 +414,17 @@ func (s *Server) consumePairing(token string) bool {
 		return false
 	}
 	if subtle.ConstantTimeCompare([]byte(token), []byte(s.pairToken)) != 1 {
+		// Even across many addresses, a code can only be guessed so often.
+		if s.pairFails++; s.pairFails >= maxPairFailures {
+			s.pairToken = ""
+			s.cfg.Log.Printf("too many wrong pairing codes: the current code was cancelled (type p for a new one)")
+		}
 		return false
 	}
 	s.pairToken = ""
+	if s.cfg.OnPairingUsed != nil {
+		go s.cfg.OnPairingUsed()
+	}
 	return true
 }
 
@@ -444,6 +507,23 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "too many attempts, try again later", http.StatusTooManyRequests)
 		return
 	}
+	s.mu.Lock()
+	if s.conns >= maxConns || s.connsByIP[ip] >= maxConnsPerIP {
+		s.mu.Unlock()
+		http.Error(w, "too many connections", http.StatusServiceUnavailable)
+		return
+	}
+	s.conns++
+	s.connsByIP[ip]++
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.conns--
+		if s.connsByIP[ip]--; s.connsByIP[ip] <= 0 {
+			delete(s.connsByIP, ip)
+		}
+		s.mu.Unlock()
+	}()
 	conn, err := ws.Upgrade(w, r)
 	if err != nil {
 		return
@@ -468,7 +548,17 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			s.send(conn, map[string]string{"t": "error", "code": "pairing"})
 			return
 		}
-		d, key, err := s.Store.Add(cleanName(m.Name))
+		name := cleanName(m.Name)
+		if s.cfg.ConfirmPairing != nil {
+			s.send(conn, map[string]string{"t": "confirm"})
+			conn.SetReadDeadline(time.Now().Add(confirmTimeout + 5*time.Second))
+			if !s.cfg.ConfirmPairing(name, ip) {
+				s.cfg.Log.Printf("pairing of %q from %s refused on this computer", name, ip)
+				s.send(conn, map[string]string{"t": "error", "code": "refused"})
+				return
+			}
+		}
+		d, key, err := s.Store.Add(name)
 		if err != nil {
 			s.send(conn, map[string]string{"t": "error", "code": "internal"})
 			return
@@ -551,9 +641,11 @@ func clamp(v, lim int) int {
 
 func (s *Server) dispatch(sess *session, m *message) error {
 	in := s.cfg.Injector
+	if m.T == "move" {
+		return s.mover.Add(clamp(m.X, 4000), clamp(m.Y, 4000))
+	}
+	s.mover.Flush() // everything else happens where the pointer really is
 	switch m.T {
-	case "move":
-		return in.Move(clamp(m.X, 4000), clamp(m.Y, 4000))
 	case "scroll":
 		return in.Scroll(clamp(m.X, 12000), clamp(m.Y, 12000))
 	case "btn":
@@ -621,6 +713,25 @@ func (s *Server) dispatch(sess *session, m *message) error {
 		return in.Type(string(r))
 	case "ping":
 		s.send(sess.conn, map[string]string{"t": "pong"})
+		return nil
+	case "sys":
+		a := system.Action(m.A)
+		if !system.Valid(a) {
+			return fmt.Errorf("bad system action %q", m.A)
+		}
+		s.cfg.Log.Printf("%s requested: %s", sess.dev.Name, a)
+		s.send(sess.conn, map[string]string{"t": "sys", "a": m.A})
+		// Let the reply reach the phone before the screen locks or sleeps.
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			do := s.cfg.SystemAction
+			if do == nil {
+				do = system.Do
+			}
+			if err := do(a); err != nil {
+				s.cfg.Log.Printf("%s failed: %v", a, err)
+			}
+		}()
 		return nil
 	}
 	return nil

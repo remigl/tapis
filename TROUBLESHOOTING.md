@@ -7,7 +7,7 @@ Start with the checklist, it solves most problems in a minute. Then look for you
 ## Quick checklist
 
 1. Tapis is running on the computer and its window shows `Firewall: OK` (Windows).
-2. The phone is on the **same Wi-Fi network** as the computer (not on mobile data, not on a "guest" network).
+2. The phone is on the **same Wi-Fi network** as the computer (not on mobile data, not on a "guest" network) and its **VPN is off** or allows local network access.
 3. You open the address shown by Tapis (`https://192.168.x.x:47800`) **in Chrome** (Android) or **Safari** (iPhone).
 4. On the certificate warning, you tapped **Advanced → Proceed**.
 
@@ -37,6 +37,25 @@ Also remove any rule named after the Tapis program that **blocks** it in *Window
 **A VPN is active** on the computer or the phone. Some VPNs block local network access: disable it, or enable "allow LAN access" in the VPN settings.
 
 **Linux firewall.** If you use ufw: `sudo ufw allow from 192.168.0.0/16 to any port 47800 proto tcp` (adapt to your network). firewalld: `sudo firewall-cmd --zone=home --add-port=47800/tcp --permanent && sudo firewall-cmd --reload` and make sure your Wi-Fi is in the `home` zone.
+
+## It works on Wi-Fi but not when the phone's VPN is on
+
+A VPN sends all the phone's traffic into an encrypted tunnel to a remote server, including traffic meant for your own network, so the phone cannot reach the computer. No website can bypass the phone's VPN, but every good VPN app has an option for it:
+
+- **Proton VPN:** Settings → *LAN connections* (Allow LAN connections).
+- **NordVPN:** *Split tunneling* → exclude Chrome.
+- **Surfshark, Mullvad, ExpressVPN, WireGuard and others:** look for *Local network sharing*, *Allow LAN*, *Bypass LAN* or *Split tunneling* (exclude Chrome).
+- **Android Private DNS** does not cause this; only VPNs do.
+
+After changing the setting, reload the Tapis page.
+
+## "Confirm on the computer" is shown and nothing happens
+
+Since 0.2.0 each new phone must be approved on the computer: in the Tapis window type `y` then Enter (or `n` to refuse). Without an answer within one minute the pairing is refused. If Tapis runs without a window (Linux service), start it with `tapis --pair` in a terminal to pair.
+
+## Lock or sleep does nothing (Linux)
+
+Lock uses `loginctl lock-session` (or `xdg-screensaver lock`) and sleep uses `systemctl suspend`. Check that they work when typed in a terminal; some desktops need a screen locker to be installed.
 
 ## The page stays white right after scanning, but works when typed in Chrome
 

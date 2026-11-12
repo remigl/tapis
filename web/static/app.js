@@ -17,8 +17,13 @@ const STR = {
     notPairedT: 'Not paired', notPaired: 'Scan the QR code shown by Tapis on your computer.\nIn the Tapis window, type p then Enter to show a new code.',
     badPairT: 'Pairing failed', badPair: 'This code was already used or has expired.\nIn the Tapis window, type p then Enter, and scan the new code.',
     revokedT: 'Phone not paired anymore', revoked: 'This phone was unpaired from the computer.\nScan a new pairing QR code to reconnect.',
-    offlineT: 'Computer unreachable', offline: 'Check that Tapis is running and that both devices are on the same Wi-Fi network.',
+    offlineT: 'Computer unreachable', offline: 'Check that Tapis is running and that both devices are on the same Wi-Fi network.\nIf a VPN is active on this phone, allow local network access in its settings or turn it off.',
     forgetQ: 'Forget this computer? You will need to scan a QR code again.',
+    tabPad: 'Trackpad', tabMedia: 'Media', tabSystem: 'Computer', holdHint: 'Hold a button to confirm',
+    lock: 'Lock the computer', sleep: 'Put to sleep', autofs: 'Full screen automatically',
+    lockDone: 'Computer locked', sleepDone: 'Computer going to sleep',
+    confirmT: 'Confirm on the computer', confirm: 'In the Tapis window, type y then Enter to allow this phone.',
+    refusedT: 'Pairing refused', refused: 'The pairing was refused on the computer (or nobody answered within a minute).\nType p in the Tapis window to try again.',
   },
   fr: {
     connecting: 'Connexion…', settings: 'Réglages', speed: 'Vitesse du pointeur', accel: 'Accélération',
@@ -30,8 +35,13 @@ const STR = {
     notPairedT: 'Pas encore appairé', notPaired: 'Scanne le QR code affiché par Tapis sur ton ordinateur.\nDans la fenêtre Tapis, tape p puis Entrée pour afficher un nouveau code.',
     badPairT: 'Appairage refusé', badPair: 'Ce code a déjà servi ou a expiré.\nDans la fenêtre Tapis, tape p puis Entrée et scanne le nouveau code.',
     revokedT: 'Téléphone désappairé', revoked: 'Ce téléphone a été retiré de l’ordinateur.\nScanne un nouveau QR code pour te reconnecter.',
-    offlineT: 'Ordinateur injoignable', offline: 'Vérifie que Tapis tourne et que les deux appareils sont sur le même Wi-Fi.',
+    offlineT: 'Ordinateur injoignable', offline: 'Vérifie que Tapis tourne et que les deux appareils sont sur le même Wi-Fi.\nSi un VPN est actif sur ce téléphone, autorise l’accès au réseau local dans ses réglages ou désactive-le.',
     forgetQ: 'Oublier cet ordinateur ? Il faudra rescanner un QR code.',
+    tabPad: 'Trackpad', tabMedia: 'Médias', tabSystem: 'Ordinateur', holdHint: 'Maintiens un bouton pour confirmer',
+    lock: 'Verrouiller l’ordinateur', sleep: 'Mettre en veille', autofs: 'Plein écran automatique',
+    lockDone: 'Ordinateur verrouillé', sleepDone: 'Mise en veille…',
+    confirmT: 'Confirme sur l’ordinateur', confirm: 'Dans la fenêtre Tapis, tape y puis Entrée pour autoriser ce téléphone.',
+    refusedT: 'Appairage refusé', refused: 'L’appairage a été refusé sur l’ordinateur (ou personne n’a répondu en une minute).\nTape p dans la fenêtre Tapis pour réessayer.',
   },
 };
 const LANG = (navigator.language || 'en').toLowerCase().startsWith('fr') ? 'fr' : 'en';
@@ -40,7 +50,7 @@ document.documentElement.lang = LANG;
 $$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
 
 // ---------- settings ----------
-const DEFAULTS = { speed: 1.6, accel: 1, scroll: 1, natural: true, inertia: true, tap: true, haptic: true };
+const DEFAULTS = { speed: 1.6, accel: 1, scroll: 1, natural: true, inertia: true, tap: true, autofs: true, haptic: true };
 const settings = { ...DEFAULTS, ...load('tapis.settings', {}) };
 function load(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }
 function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } }
@@ -71,11 +81,21 @@ if (m) {
   history.replaceState(null, '', location.pathname); // keep the token out of history
 }
 
-function overlay(titleKey, textKey) {
+function overlay(titleKey, textKey, retry = true) {
   if (!titleKey) { $('#overlay').hidden = true; return; }
   $('#ov-title').textContent = t(titleKey);
   $('#ov-text').textContent = t(textKey);
+  $('#ov-retry').hidden = !retry;
   $('#overlay').hidden = false;
+}
+
+let toastTimer = 0;
+function toast(text) {
+  const el = $('#toast');
+  el.textContent = text;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 2500);
 }
 
 function setStatus(state, label) {
@@ -123,8 +143,14 @@ function connect() {
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
     switch (msg.t) {
+      case 'confirm':
+        overlay('confirmT', 'confirm', false);
+        break;
       case 'paired':
         save('tapis.device', { id: msg.id, key: msg.key });
+        break;
+      case 'sys':
+        toast(t(msg.a === 'lock' ? 'lockDone' : 'sleepDone'));
         break;
       case 'ok':
         connected = true;
@@ -136,6 +162,7 @@ function connect() {
       case 'error':
         fatal = true;
         if (msg.code === 'pairing') overlay('badPairT', 'badPair');
+        else if (msg.code === 'refused') overlay('refusedT', 'refused');
         else if (msg.code === 'auth') { localStorage.removeItem('tapis.device'); overlay('revokedT', 'revoked'); }
         setStatus('bad', 'Tapis');
         break;
@@ -376,7 +403,7 @@ for (const b of $$('[data-btn]')) {
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // ---------- special keys bar ----------
-for (const b of $$('#keys button')) {
+for (const b of $$('#keys button, #view-media button')) {
   let repeatTimer = 0;
   const stopRepeat = () => { clearTimeout(repeatTimer); clearInterval(repeatTimer); repeatTimer = 0; };
   b.addEventListener('pointerdown', (e) => {
@@ -508,8 +535,61 @@ kbd.addEventListener('blur', () => setKeyboard(false));
 $('#btn-kbd').addEventListener('pointerdown', (e) => e.preventDefault()); // don't steal focus
 $('#btn-kbd').addEventListener('click', () => {
   if (document.activeElement === kbd) kbd.blur();
-  else { kbd.focus(); resetField(); }
+  else { showTab('pad'); kbd.focus(); resetField(); }
 });
+
+// ---------- tabs ----------
+function showTab(name) {
+  for (const b of $$('#tabs [data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === name));
+  for (const v of $$('.view')) v.hidden = v.id !== 'view-' + name;
+  save('tapis.tab', name);
+}
+for (const b of $$('#tabs [data-tab]')) b.addEventListener('click', () => { showTab(b.dataset.tab); haptic(); });
+showTab(load('tapis.tab', 'pad'));
+
+// ---------- computer actions (hold to confirm) ----------
+const HOLD_MS = 800;
+for (const b of $$('[data-sys]')) {
+  let start = 0, frame = 0;
+  const reset = () => { cancelAnimationFrame(frame); start = 0; b.style.setProperty('--p', 0); b.classList.remove('done'); };
+  const tick = (now) => {
+    const p = Math.min((now - start) / HOLD_MS, 1);
+    b.style.setProperty('--p', p);
+    if (p < 1) { frame = requestAnimationFrame(tick); return; }
+    b.classList.add('done');
+    haptic(30);
+    send({ t: 'sys', a: b.dataset.sys });
+    start = 0;
+    setTimeout(reset, 600);
+  };
+  b.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    b.setPointerCapture(e.pointerId);
+    start = performance.now();
+    haptic();
+    frame = requestAnimationFrame(tick);
+  });
+  for (const ev of ['pointerup', 'pointercancel']) b.addEventListener(ev, () => { if (start) reset(); });
+}
+
+// ---------- full screen ----------
+async function toggleFullscreen(on = !document.fullscreenElement) {
+  try {
+    if (!on && document.fullscreenElement) await document.exitFullscreen();
+    else if (on && !document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+  } catch { /* unsupported (e.g. iPhone Safari) */ }
+}
+$('#btn-fs').addEventListener('pointerdown', (e) => e.preventDefault());
+$('#btn-fs').addEventListener('click', () => toggleFullscreen());
+if (!document.documentElement.requestFullscreen) $('#btn-fs').hidden = true;
+// Browsers only allow full screen right after a touch ends (pointerup
+// grants "user activation" for touch input): do it on the first one.
+let autoFsDone = false;
+document.addEventListener('pointerup', () => {
+  if (autoFsDone) return;
+  autoFsDone = true;
+  if (settings.autofs) toggleFullscreen(true);
+}, { capture: true });
 
 // When Android's back gesture hides the keyboard the field keeps focus;
 // detect the viewport growing back and drop focus so the button toggles.
@@ -524,12 +604,6 @@ window.addEventListener('orientationchange', () => { fullHeight = 0; });
 
 // ---------- settings dialog ----------
 $('#btn-settings').addEventListener('click', () => { kbd.blur(); $('#settings').showModal(); });
-$('#btn-fullscreen').addEventListener('click', async () => {
-  try {
-    if (document.fullscreenElement) await document.exitFullscreen();
-    else await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
-  } catch { /* unsupported */ }
-});
 $('#btn-forget').addEventListener('click', () => {
   if (!confirm(t('forgetQ'))) return;
   localStorage.removeItem('tapis.device');

@@ -8,8 +8,11 @@
 
 - **Aucune appli à installer sur le téléphone.** L'ordinateur sert une petite web-app : tu scannes un QR code et c'est parti.
 - **Pas d'Internet, pas de cloud, pas de compte.** Le téléphone et l'ordinateur se parlent directement sur ton réseau. La page ne charge rien de l'extérieur et le serveur refuse tout client qui n'est pas sur un réseau privé.
-- **Chiffré et appairé.** TLS 1.3 avec un certificat généré sur ton ordinateur, appairage unique par QR code, une clé par téléphone, révocable.
+- **Chiffré et appairé.** TLS 1.3 avec un certificat généré sur ton ordinateur, appairage par QR code à usage unique confirmé sur l'ordinateur, une clé par téléphone, révocable. [Audité](SECURITY.md).
 - **Un vrai trackpad.** Accélération du pointeur, toucher pour cliquer, défilement à deux doigts avec inertie, clic droit à deux doigts, glisser-déposer, clic milieu à trois doigts.
+- **Télécommande média.** Gros boutons précédent / lecture-pause / suivant et volume dans leur propre onglet.
+- **Contrôle de l'ordinateur.** Verrouiller ou mettre en veille (maintenir pour confirmer).
+- **Fluide.** Le mouvement du pointeur est interpolé sur l'ordinateur : il glisse même sur un écran 144 Hz. Plein écran en un toucher.
 - **Le clavier de ton téléphone.** Compatible avec la saisie prédictive et la saisie gestuelle (Gboard, SwiftKey, Samsung), les accents et les emoji, plus une barre avec Échap, Tab, Ctrl/Alt/Win/Maj, flèches, touches F, médias et volume.
 - **Un seul petit binaire, zéro dépendance.** Écrit en Go avec uniquement la bibliothèque standard : facile à auditer.
 - **Logiciel libre** sous licence GPL-3.0.
@@ -22,7 +25,8 @@ Ordinateurs pris en charge : **Windows 10/11** et **Linux** (X11 et tous les bur
 2. Lance-le dans un terminal. La première fois, il affiche un QR code.
 3. Scanne le QR code avec l'appareil photo du téléphone, connecté au même Wi-Fi.
 4. Le navigateur avertit que la connexion n'est pas privée. C'est normal : le certificat vient d'être généré par ton ordinateur (voir [Sécurité](#sécurité)). Touche **Paramètres avancés → Continuer**.
-5. C'est tout. La prochaine fois, ouvre simplement la même adresse : le téléphone reste appairé. Astuce : « Ajouter à l'écran d'accueil » pour une appli plein écran.
+5. Dans la fenêtre Tapis, tape `y` puis Entrée pour autoriser le téléphone.
+6. C'est tout. La prochaine fois, ouvre simplement la même adresse : le téléphone reste appairé. Astuce : « Ajouter à l'écran d'accueil » pour une appli plein écran.
 
 Un souci ? Voir le **[guide de dépannage](DEPANNAGE.md)**.
 
@@ -53,7 +57,7 @@ Pendant que Tapis tourne, tape dans sa fenêtre :
 - `q` + Entrée : quitter
 
 Aussi disponibles en commandes : `tapis devices`, `tapis revoke <id|all>`, `tapis version`.
-Options : `--port` (47800 par défaut), `--layout` (Linux), `--pair`, `--config`, `--dry-run` (affiche les événements au lieu de bouger le pointeur).
+Options : `--port` (47800 par défaut), `--layout` (Linux), `--pair`, `--config`, `--no-confirm` (appairer sans confirmation sur l'ordinateur), `--no-smooth`, `--no-firewall`, `--dry-run` (affiche les événements au lieu de bouger le pointeur).
 
 ## Installation
 
@@ -83,25 +87,19 @@ Si tu utilises `ufw`/`firewalld`, ouvre le port TCP 47800 pour ton réseau local
 
 ## Sécurité
 
-Modèle de menace : quelqu'un d'autre sur le même Wi-Fi (café, colocation, réseau invité) qui voudrait contrôler ton ordinateur ou lire ce que tu tapes.
+En bref : réseau local uniquement, TLS 1.3, autorité de certification limitée aux adresses privées, QR codes à usage unique confirmés sur l'ordinateur, une clé par téléphone, isolation web stricte, zéro dépendance, provenance des binaires signée. Le modèle de menace complet, l'audit et les limites restantes sont dans **[SECURITY.md](SECURITY.md)**.
 
-- **Pare-feu.** Sous Windows, la règle de pare-feu de Tapis est limitée à son programme, son port et le sous-réseau local.
-- **Local uniquement.** Le serveur refuse tout client dont l'adresse n'est pas privée (192.168.x, 10.x, 172.16–31.x, lien local, boucle locale). Aucune requête ne sort de ton réseau ; la web-app a une Content-Security-Policy stricte et ne charge aucune ressource externe.
-- **Chiffrement.** TLS 1.3 uniquement. Au premier lancement, Tapis crée une petite autorité de certification sur ton ordinateur, **limitée aux adresses privées** (name constraints), et un certificat serveur signé par elle. Même si sa clé fuitait, elle ne pourrait pas usurper un vrai site web.
-- **Appairage.** Le QR code contient un jeton aléatoire de 128 bits, à usage unique, valable 5 minutes. Il est placé après le `#` de l'URL : il n'est jamais envoyé dans une requête HTTP ni gardé dans l'historique. Après l'appairage, le téléphone reçoit sa propre clé de 256 bits ; l'ordinateur n'en garde que l'empreinte SHA-256.
-- **Authentification.** Chaque connexion doit s'authentifier en moins de 10 secondes. Après 5 échecs, l'adresse est bloquée une minute. Le WebSocket vérifie l'en-tête `Origin` : aucune autre page web ne peut piloter Tapis.
-- **Révocation.** `tapis revoke <id>` agit immédiatement, même serveur lancé, et déconnecte le téléphone.
-- **Sûreté.** Si le téléphone se déconnecte, tout bouton ou modificateur maintenu est relâché.
+**À propos de l'avertissement du navigateur.** Une page web ne peut pas épingler un certificat : la première fois, il faut accepter le certificat généré par Tapis. Fais-le sur ton propre réseau. Si le navigateur avertit **à nouveau** sur le même réseau sans que tu aies réinitialisé Tapis, ne continue pas.
 
-**À propos de l'avertissement du navigateur.** Une page web ne peut pas épingler un certificat : la première fois, il faut accepter le certificat généré par Tapis. Fais-le juste après avoir scanné, sur ton propre réseau. Ensuite, si le navigateur avertit **à nouveau** alors que tu n'as ni réinitialisé Tapis ni changé de réseau, ne continue pas : quelque chose intercepte peut-être la connexion.
+**Supprimer l'avertissement pour de bon (recommandé).** Dans les réglages de Tapis sur le téléphone, touche **Télécharger le certificat**, puis installe-le sur Android via *Paramètres → Sécurité → … → Installer un certificat → Certificat CA* (cherche « certificat » dans les Paramètres). Dans ses détails (*Identifiants de confiance → Utilisateur*), l'empreinte SHA-256 doit correspondre à l'empreinte **Authority** affichée par Tapis au démarrage. L'autorité est limitée aux adresses privées : lui faire confiance n'affaiblit pas ta sécurité sur Internet.
 
-Pour la configuration la plus sûre, supprime l'avertissement en faisant confiance à l'autorité de Tapis sur ton téléphone : dans les réglages de Tapis, touche **Télécharger le certificat**, puis installe-le sur Android via *Paramètres → Sécurité → … → Installer un certificat → Certificat CA* (le chemin exact dépend de la marque ; cherche « certificat » dans les Paramètres). Dans les détails du certificat (*Identifiants de confiance → Utilisateur*), l'empreinte SHA-256 doit correspondre à l'empreinte **Authority** affichée par Tapis au démarrage. Comme l'autorité est limitée aux adresses privées, lui faire confiance n'affaiblit pas ta sécurité sur Internet.
+**Vérifier un téléchargement :** `gh attestation verify <fichier> --repo remigl/tapis` (voir [CODE_SIGNING.md](CODE_SIGNING.md)).
 
 Les fichiers sont dans le dossier de configuration (`%AppData%\tapis` sous Windows, `~/.config/tapis` sous Linux). Supprime-le pour tout réinitialiser.
 
 ## Compiler
 
-Il faut Go 1.22 ou plus récent, aucune autre dépendance.
+Il faut Go 1.24 ou plus récent, aucune autre dépendance.
 
 ```sh
 git clone https://github.com/remigl/tapis && cd tapis

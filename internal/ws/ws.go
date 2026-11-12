@@ -121,6 +121,9 @@ func (c *Conn) readFrame() (fin bool, op byte, payload []byte, err error) {
 	if n > MaxMessage {
 		return false, 0, nil, errors.New("ws: frame too large")
 	}
+	if op >= opClose && (n > 125 || !fin) { // RFC 6455 §5.5
+		return false, 0, nil, errors.New("ws: invalid control frame")
+	}
 	var mask [4]byte
 	if _, err = io.ReadFull(c.br, mask[:]); err != nil {
 		return
