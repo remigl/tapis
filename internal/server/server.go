@@ -53,6 +53,7 @@ type Server struct {
 	pairToken   string
 	pairExpires time.Time
 	fails       map[string]*failInfo
+	notes       map[string]time.Time
 	sessions    map[*session]struct{}
 }
 
@@ -135,7 +136,7 @@ func (s *Server) Run(ctx context.Context) error {
 		TLSNextProto:      map[string]func(*http.Server, *tls.Conn, http.Handler){},
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
-		ErrorLog:          log.New(io.Discard, "", 0), // TLS handshake noise from untrusted-cert probes
+		ErrorLog:          log.New(&handshakeLog{s: s}, "", 0),
 	}
 	// Someone typing the address without "https://" gets redirected
 	// instead of a confusing error. Both protocols share the same port.
@@ -205,6 +206,41 @@ func (s *Server) Run(ctx context.Context) error {
 	return err
 }
 
+// noteOnce logs msg at most once per key and minute, to help users see
+// what reaches Tapis without flooding the console.
+func (s *Server) noteOnce(key, msg string) {
+	s.mu.Lock()
+	if s.notes == nil {
+		s.notes = map[string]time.Time{}
+	}
+	last, seen := s.notes[key]
+	if seen && time.Since(last) < time.Minute {
+		s.mu.Unlock()
+		return
+	}
+	s.notes[key] = time.Now()
+	s.mu.Unlock()
+	s.cfg.Log.Print(msg)
+}
+
+// handshakeLog turns Go's TLS handshake errors into hints: a phone whose
+// browser has not accepted the certificate yet shows up here.
+type handshakeLog struct{ s *Server }
+
+func (h *handshakeLog) Write(p []byte) (int, error) {
+	line := string(p)
+	if i := strings.Index(line, "TLS handshake error from "); i >= 0 {
+		rest := line[i+len("TLS handshake error from "):]
+		host, _, _ := net.SplitHostPort(strings.SplitN(rest, ": ", 2)[0])
+		if ip := net.ParseIP(host); ip != nil && !ip.IsLoopback() {
+			if strings.Contains(rest, "certificate") || strings.Contains(rest, "EOF") || strings.Contains(rest, "reset") {
+				h.s.noteOnce("tls"+host, "device "+host+" reached Tapis; its browser must now accept the certificate (Advanced > Proceed)")
+			}
+		}
+	}
+	return len(p), nil
+}
+
 // peekConn is a connection whose first bytes were already buffered.
 type peekConn struct {
 	net.Conn
@@ -269,6 +305,10 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			s.cfg.Log.Printf("rejected connection from non-local address %s", r.RemoteAddr)
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
+		}
+		if r.URL.Path == "/" {
+			ip := remoteIP(r).String()
+			s.noteOnce("page"+ip, "device "+ip+" opened the Tapis page")
 		}
 		h := w.Header()
 		h.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; "+

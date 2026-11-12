@@ -1,7 +1,9 @@
 package server
 
 import (
+	"log"
 	"net"
+	"strings"
 	"testing"
 )
 
@@ -14,5 +16,16 @@ func TestIsLocal(t *testing.T) {
 		if got := IsLocal(net.ParseIP(ip)); got != want {
 			t.Errorf("IsLocal(%s) = %v, want %v", ip, got, want)
 		}
+	}
+}
+
+func TestHandshakeLog(t *testing.T) {
+	var buf strings.Builder
+	s := &Server{cfg: Config{Log: log.New(&buf, "", 0)}}
+	h := &handshakeLog{s: s}
+	h.Write([]byte("http: TLS handshake error from 192.168.1.23:51234: remote error: tls: unknown certificate\n"))
+	h.Write([]byte("http: TLS handshake error from 192.168.1.23:51235: remote error: tls: unknown certificate\n"))
+	if got := strings.Count(buf.String(), "192.168.1.23 reached Tapis"); got != 1 {
+		t.Fatalf("got %d notes: %q", got, buf.String())
 	}
 }
