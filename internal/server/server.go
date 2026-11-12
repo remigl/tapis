@@ -515,6 +515,16 @@ func LocalIPs() []net.IP {
 		ip    net.IP
 		score int
 	}
+	// The address used by the default route is almost always the Wi-Fi or
+	// Ethernet one. A UDP "connect" only asks the OS routing table: no
+	// packet is sent.
+	var routed net.IP
+	if c, err := net.Dial("udp4", "8.8.8.8:53"); err == nil {
+		if a, ok := c.LocalAddr().(*net.UDPAddr); ok {
+			routed = a.IP.To4()
+		}
+		c.Close()
+	}
 	var cands []cand
 	for _, ifc := range ifaces {
 		if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 {
@@ -528,9 +538,6 @@ func LocalIPs() []net.IP {
 				break
 			}
 		}
-		if virtual {
-			continue
-		}
 		addrs, _ := ifc.Addrs()
 		for _, a := range addrs {
 			ipn, ok := a.(*net.IPNet)
@@ -543,6 +550,10 @@ func LocalIPs() []net.IP {
 			}
 			score := 2
 			switch {
+			case routed != nil && ip.Equal(routed):
+				score = -1
+			case virtual:
+				continue
 			case ip[0] == 192 && ip[1] == 168:
 				score = 0
 			case ip[0] == 10:
